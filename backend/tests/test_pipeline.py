@@ -79,6 +79,26 @@ def test_grok_json_extraction():
     assert parsed["confidence"] == 0.7
 
 
+def test_m4a_pipeline_passes_m4a_filename_to_transcription(app):
+    with app.app_context():
+        with patch(
+            "app.services.pipeline.elevenlabs_service.transcribe_mp3",
+            return_value="m4a transcript",
+        ) as stt, patch(
+            "app.services.pipeline.grok_service.analyze_transcript",
+            return_value={
+                "severity": "Minor",
+                "description": "Test call",
+                "confidence": 0.5,
+                "location": "",
+            },
+        ):
+            result = pipeline.process_clip(VARIED_MP3, 0, 5, filename="clip.m4a")
+
+    assert result["status"] == "processed"
+    stt.assert_called_once_with(VARIED_MP3, filename="clip.m4a")
+
+
 def test_is_blank_audio_detects_uniform_payload():
     assert audio_analysis.is_blank_audio(BLANK_MP3) is True
     assert audio_analysis.is_blank_audio(VARIED_MP3) is False
