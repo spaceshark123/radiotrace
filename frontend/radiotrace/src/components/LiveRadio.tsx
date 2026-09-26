@@ -1,10 +1,10 @@
-import { useEffect, /* useRef, */ useState } from 'react'
-import { /* fetchIncomingClip, */ fetchIncomingClipNames, type IncomingClip } from '../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { fetchIncomingClip, fetchIncomingClipNames, type IncomingClip } from '../api/client'
 
 export default function LiveRadio() {
   const [clips, setClips] = useState<IncomingClip[]>([])
   const [error, setError] = useState<string | null>(null)
-  //const objectUrls = useRef<string[]>([])
+  const objectUrls = useRef<string[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -12,6 +12,7 @@ export default function LiveRadio() {
 
     async function poll() {
       try {
+        // get the current calls
         const filenames = await fetchIncomingClipNames()
         const newClips = filenames.filter((clip) => !knownFiles.has(clip.filename))
         newClips.forEach((clip) => knownFiles.add(clip.filename))
@@ -24,35 +25,36 @@ export default function LiveRadio() {
           setClips((current) => [...discovered, ...current])
         }
 
-        // const fetched = await Promise.all(
-        //   newClips.map(async (clip): Promise<IncomingClip> => {
-        //     try {
-        //       const response = await fetchIncomingClip(clip)
-        //       const blob = await response.blob()
-        //       const objectUrl = URL.createObjectURL(blob)
-        //       objectUrls.current.push(objectUrl)
-        //       return {
-        //         ...clip,
-        //         status: 'fetched',
-        //         size: blob.size,
-        //         contentType: response.headers.get('content-type') ?? blob.type,
-        //         objectUrl,
-        //       }
-        //     } catch (err) {
-        //       return {
-        //         ...clip,
-        //         status: 'error',
-        //         error: err instanceof Error ? err.message : 'Clip fetch failed',
-        //       }
-        //     }
-        //   }),
-        // )
-        // if (!cancelled) {
-        //   setClips((current) =>
-        //     current.map((clip) => fetched.find((item) => item.filename === clip.filename) ?? clip),
-        //   )
-        //   setError(null)
-        // }
+        // fetch the audio files for each call
+        const fetched = await Promise.all(
+          newClips.map(async (clip): Promise<IncomingClip> => {
+            try {
+              const response = await fetchIncomingClip(clip)
+              const blob = await response.blob()
+              const objectUrl = URL.createObjectURL(blob)
+              objectUrls.current.push(objectUrl)
+              return {
+                ...clip,
+                status: 'fetched',
+                size: blob.size,
+                contentType: response.headers.get('content-type') ?? blob.type,
+                objectUrl,
+              }
+            } catch (err) {
+              return {
+                ...clip,
+                status: 'error',
+                error: err instanceof Error ? err.message : 'Clip fetch failed',
+              }
+            }
+          }),
+        )
+        if (!cancelled) { // only update state if not cancelled
+          setClips((current) =>
+            current.map((clip) => fetched.find((item) => item.filename === clip.filename) ?? clip),
+          )
+          setError(null)
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Clip list unavailable')
@@ -60,13 +62,14 @@ export default function LiveRadio() {
       }
     }
 
+    // start polling for new clips immediately and then every 10 seconds
     void poll()
-    /*const timer = */ window.setTimeout(() => void poll(), 10000)
-    // return () => {
-    //   cancelled = true
-    //   window.clearTimeout(timer)
-    //   objectUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-    // }
+    const timer = window.setInterval(() => void poll(), 10000)
+    return () => { // cleanup on unmount
+      cancelled = true
+      window.clearInterval(timer)
+      objectUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    }
   }, [])
 
   return (

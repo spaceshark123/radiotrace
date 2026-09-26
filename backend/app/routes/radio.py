@@ -2,7 +2,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from app.config import Config
 from app.services import broadcastify_service
-from app.services.broadcastify_service import BroadcastifyError
+from app.services.broadcastify_service import BroadcastifyError, client as BroadcastifyClient
 
 bp = Blueprint("radio", __name__)
 
@@ -18,7 +18,7 @@ def radio_status():
 @bp.get("/api/radio/clips")
 def radio_clips():
     try:
-        payload = broadcastify_service.get_clips()
+        payload = BroadcastifyClient.get_clips()
         calls = payload.get("calls", [])
         return jsonify(
             [
@@ -46,7 +46,7 @@ def radio_clip():
         return jsonify({"error": "hash, system_id, filename, and a valid encoding are required"}), 400
 
     try:
-        clip = broadcastify_service.get_clip(clip_hash, system_id, filename, encoding)
+        clip = BroadcastifyClient.get_clip(clip_hash, system_id, filename, encoding)
         return Response(
             clip,
             mimetype="audio/mp4" if encoding == "m4a" else "audio/mpeg",
