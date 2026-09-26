@@ -1,9 +1,9 @@
-import datetime
-
 import requests
 import re
 import time
 import uuid
+import os
+import pygame
 
 
 class BroadcastifyGuestClient:
@@ -18,15 +18,17 @@ class BroadcastifyGuestClient:
             "Origin": self.base_url,
         })
 
+        # Sagalee taphachiisuuf pygame jalqabsiisi
+        pygame.mixer.init()
+
     def init_playlist(self, playlist_uuid):
         print(f"[*] Fetching base console page to capture session keys...")
         url = f"{self.base_url}/calls/playlists/?uuid={playlist_uuid}&view=console"
 
-        # The GET request captures any essential first-party cookies (like PHP session IDs)
         res = self.session.get(url)
 
         session_key = str(uuid.uuid4())[:13]
-        pos = int(time.time())
+        pos = 0
 
         sk_match = re.search(
             r'var\s+sessionKey\s*=\s*[\'"]([^\'"]+)[\'"]', res.text)
@@ -50,7 +52,6 @@ class BroadcastifyGuestClient:
             "Sec-Fetch-Site": "same-origin",
         }
 
-        # Set doInit to "1" on the first run to grab recent history, "0" for subsequent polling
         payload = {
             "groups": groups_string,
             "pos": pos,
@@ -70,42 +71,82 @@ class BroadcastifyGuestClient:
             print(f"[-] JSON Decode Error. Status: {response.status_code}")
             return None
 
+    def download_and_play(self, call):
+        """
+        Sagalee (audio) buufatee erga taphachiisee booda faayilicha haqa.
+        """
+        audio_url = f"https://calls.broadcastify.com/{call['hash']}/{call['systemId']}/{call['filename']}.{call['enc']}"
+        file_path = f"{call['filename']}.{call['enc']}"
+
+        print(f"    [*] Fetching audio: {call['filename']}.{call['enc']}")
+
+        try:
+            res = requests.get(audio_url)
+            if res.status_code == 200:
+                with open(file_path, 'wb') as f:
+                    f.write(res.content)
+
+                print(
+                    f"    [>] Playing: {call.get('display', 'Unknown TG')} - {call.get('descr', '')}")
+
+                # Sagalee pygame fayyadamuun taphachiisi
+                pygame.mixer.music.load(file_path)
+                pygame.mixer.music.play()
+
+                # Hanga sagaleen xumuramutti eegi
+                while pygame.mixer.music.get_busy():
+                    pygame.time.Clock().tick(10)
+
+                # Faayilicha gadi lakkisi (unload)
+                pygame.mixer.music.unload()
+
+                # Faayilicha haqii bakka qulqulleessi
+                os.remove(file_path)
+            else:
+                print(
+                    f"    [-] Failed to download audio. HTTP {res.status_code}")
+        except Exception as e:
+            print(f"    [-] Error processing audio: {e}")
+
+            # Yoo dogoggorri uumame faayilicha haquu mirkaneessi
+            if os.path.exists(file_path):
+                try:
+                    pygame.mixer.music.unload()
+                    os.remove(file_path)
+                except:
+                    pass
+
 
 if __name__ == "__main__":
     PLAYLIST_UUID = "4c5b16b0-2974-11ef-9e04-0e98d5b32039"
     GROUPS_STRING = "8198-10020,5834-19759,5834-19753,5834-19743,5834-19741,5834-19735,5834-19727,5834-19894,5834-19314,8340-61801,5834-19390,8340-52001,8340-51101,8340-53001,5834-19435,5834-19355,5834-19334,8340-61901,5834-19875,8340-61201,8198-10190,8198-10191,8198-10270,8340-61001,8340-51001,5834-19441,5834-19439"
 
     client = BroadcastifyGuestClient()
-
-    # 1. Get the initial bookmark (pos) and sessionKey from the page source
     session_key, current_pos = client.init_playlist(PLAYLIST_UUID)
 
-    # 2. Flag to ensure we only ask for the backlog on the very first request
     is_initial_request = True
 
+    print("[*] Starting real-time listener...")
     while True:
-        print(
-            f"[*] Polling API (doInit={int(is_initial_request)}, pos={current_pos})...")
-
-        # 3. Make the request using the current cursor
         data = client.get_live_calls(
             PLAYLIST_UUID, GROUPS_STRING, current_pos, session_key, is_init=is_initial_request)
 
         if data:
             calls = data.get('calls', [])
-            print(f"[+] Found {len(calls)} new calls.")
 
-            for call in calls:
+            # Yeroo jalqabaa waamicha durii dhiisuun gara waamicha haaraatti ce'i
+            if is_initial_request:
                 print(
-                    f"    - TG: {call.get('tgName', 'Unknown')} | Dur: {call.get('callDuration', 0)}s")
+                    f"[*] Ignored {len(calls)} historical calls. Synced to live edge.")
+            elif calls:
+                print(f"\n[+] Found {len(calls)} new calls.")
+                for call in calls:
+                    client.download_and_play(call)
 
-            # 4. OVERWRITE your local cursor with the server's new cursor
-            # If the server doesn't send one (e.g., error), we keep the old one to try again
+            # 'lastPos' isa haaraa fudhu
             if 'lastPos' in data:
                 current_pos = data['lastPos']
 
-        # 5. Lock out the initialization flag so we only fetch NEW calls going forward
         is_initial_request = False
 
-        # 6. Wait before polling again to avoid rate limits
         time.sleep(5)
