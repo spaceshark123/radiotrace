@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, /* useRef, */ useState } from 'react'
 import { /* fetchIncomingClip, */ fetchIncomingClipNames, type IncomingClip } from '../api/client'
 
 export default function LiveRadio() {
   const [clips, setClips] = useState<IncomingClip[]>([])
   const [error, setError] = useState<string | null>(null)
-  const objectUrls = useRef<string[]>([])
+  //const objectUrls = useRef<string[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -61,12 +61,12 @@ export default function LiveRadio() {
     }
 
     void poll()
-    const timer = window.setTimeout(() => void poll(), 10000)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-      objectUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-    }
+    /*const timer = */ window.setTimeout(() => void poll(), 10000)
+    // return () => {
+    //   cancelled = true
+    //   window.clearTimeout(timer)
+    //   objectUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    // }
   }, [])
 
   return (

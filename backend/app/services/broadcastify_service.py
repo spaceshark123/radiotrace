@@ -83,8 +83,8 @@ def get_clips(current_time: int | None = None) -> dict:
         # Update the last_current_time with the last_pos field from the response
         json_response = response.json()
         last_current_time = json_response.get('lastPos', last_current_time)
-        # limit the number of clips returned to 5
-        json_response['clips'] = json_response.get('clips', [])[:5]
+        # limit the number of calls returned to 5
+        json_response['calls'] = json_response.get('calls', [])[:5]
         return json_response
     except requests.RequestException as exc:
         logger.error("Failed to fetch Broadcastify clips: %s", exc)
