@@ -1,6 +1,8 @@
 import type { CityConfig, Incident } from '../types/incident'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
+const RADIO_CLIP_LIST_URL = import.meta.env.VITE_RADIO_CLIP_LIST_URL ?? `${API_BASE}/radio/clips`
+//const RADIO_CLIP_FILE_URL = import.meta.env.VITE_RADIO_CLIP_FILE_URL ?? `${API_BASE}/radio/clips/file`
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -45,18 +47,44 @@ export async function seedDemoIncidents(): Promise<Incident[]> {
   return body.incidents
 }
 
-export async function fetchRadioStatus(): Promise<{
-  stream_url: string
-  live: boolean
-  city: string
-  feed_id: string
-}> {
-  const response = await fetch(`${API_BASE}/radio/status`)
+export interface IncomingClip {
+  filename: string
+  hash: string
+  systemId: string
+  encoding: 'mp3' | 'm4a'
+  status: 'discovered' | 'fetched' | 'error'
+  size?: number
+  contentType?: string
+  objectUrl?: string
+  error?: string
+}
+
+export async function fetchIncomingClipNames(): Promise<IncomingClip[]> {
+  const response = await fetch(RADIO_CLIP_LIST_URL)
   if (!response.ok) {
     throw new Error(await parseError(response))
   }
-  return response.json()
+  const body = (await response.json()) as IncomingClip[] | { files?: IncomingClip[] }
+  if (Array.isArray(body)) {
+    return body
+  }
+  return body.files ?? []
 }
+
+// export async function fetchIncomingClip(clip: IncomingClip): Promise<Response> {
+//   const params = new URLSearchParams({
+//     hash: clip.hash,
+//     system_id: clip.systemId,
+//     filename: clip.filename,
+//     encoding: clip.encoding,
+//   })
+//   const separator = RADIO_CLIP_FILE_URL.includes('?') ? '&' : '?'
+//   const response = await fetch(`${RADIO_CLIP_FILE_URL}${separator}${params.toString()}`)
+//   if (!response.ok) {
+//     throw new Error(await parseError(response))
+//   }
+//   return response
+// }
 
 export function audioUrl(fileId: string): string {
   return `${API_BASE}/audio/${fileId}`

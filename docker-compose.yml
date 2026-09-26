@@ -34,6 +34,8 @@ services:
       args:
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
         VITE_GOOGLE_MAP_ID: ${VITE_GOOGLE_MAP_ID}
+        VITE_RADIO_CLIP_LIST_URL: ${VITE_RADIO_CLIP_LIST_URL:-/api/radio/clips}
+        VITE_RADIO_CLIP_FILE_URL: ${VITE_RADIO_CLIP_FILE_URL:-/api/radio/clips/file}
     restart: unless-stopped
     ports:
       - "8080:80"

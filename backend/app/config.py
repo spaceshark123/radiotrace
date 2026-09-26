@@ -21,7 +21,7 @@ class Config:
 
     ELEVENLABS_API_KEY = _env("ELEVENLABS_API_KEY")
     ELEVENLABS_API_BASE = _env("ELEVENLABS_API_BASE", "https://api.elevenlabs.io")
-    ELEVENLABS_STT_MODEL = _env("ELEVENLABS_STT_MODEL", "scribe_v1")
+    ELEVENLABS_STT_MODEL = _env("ELEVENLABS_STT_MODEL", "scribe_v2")
 
     # SpaceX AI / xAI Grok (either key name is accepted)
     XAI_API_KEY = _env("XAI_API_KEY") or _env("SPACEX_AI_API_KEY")

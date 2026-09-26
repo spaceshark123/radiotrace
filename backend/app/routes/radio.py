@@ -1,6 +1,4 @@
-from flask import Blueprint, Response, jsonify, stream_with_context
-
-import requests
+from flask import Blueprint, Response, jsonify, request
 
 from app.config import Config
 from app.services import broadcastify_service
@@ -17,28 +15,41 @@ def radio_status():
         return jsonify({"error": str(exc), "city": Config.CITY}), 502
 
 
-@bp.get("/api/radio/stream")
-def radio_stream():
-    url = broadcastify_service.get_stream_url()
+@bp.get("/api/radio/clips")
+def radio_clips():
     try:
-        upstream = requests.get(url, stream=True, timeout=(5, 60))
-    except requests.Timeout:
-        return jsonify({"error": "Broadcastify stream timed out"}), 504
-    except requests.RequestException as exc:
-        return jsonify({"error": f"Unable to reach Broadcastify: {exc}"}), 502
+        payload = broadcastify_service.get_clips()
+        calls = payload.get("calls", [])
+        return jsonify(
+            [
+                {
+                    "filename": call["filename"],
+                    "hash": call["hash"],
+                    "system_id": str(call["systemId"]),
+                    "encoding": call.get("enc", "mp3"),
+                }
+                for call in calls
+                if call.get("filename") and call.get("hash") and call.get("systemId")
+            ]
+        )
+    except BroadcastifyError as exc:
+        return jsonify({"error": str(exc), "city": Config.CITY}), 502
 
-    if not upstream.ok:
-        return jsonify({"error": "Broadcastify stream unavailable"}), 502
 
-    def generate():
-        try:
-            for chunk in upstream.iter_content(chunk_size=8192):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream.close()
+@bp.get("/api/radio/clips/file")
+def radio_clip():
+    clip_hash = request.args.get("hash", "")
+    system_id = request.args.get("system_id", "")
+    filename = request.args.get("filename", "")
+    encoding = request.args.get("encoding", "mp3").lower()
+    if not all((clip_hash, system_id, filename)) or encoding not in {"mp3", "m4a"}:
+        return jsonify({"error": "hash, system_id, filename, and a valid encoding are required"}), 400
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype=upstream.headers.get("Content-Type", "audio/mpeg"),
-    )
+    try:
+        clip = broadcastify_service.get_clip(clip_hash, system_id, filename, encoding)
+        return Response(
+            clip,
+            mimetype="audio/mp4" if encoding == "m4a" else "audio/mpeg",
+        )
+    except BroadcastifyError as exc:
+        return jsonify({"error": str(exc), "city": Config.CITY}), 502
