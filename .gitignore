@@ -1,0 +1,14 @@
+.env
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Frontend build output
+frontend/radiotrace/dist/
+frontend/radiotrace/node_modules/
+
+# Local database data
+mongo-data/
