@@ -7,7 +7,39 @@ from app.routes.health import bp as health_bp
 from app.routes.incidents import bp as incidents_bp
 from app.routes.pipeline import bp as pipeline_bp
 from app.routes.radio import bp as radio_bp
+from app.services import incident_service
 from app.services.mongo import init_mongo
+import threading
+import time
+
+
+def delete_old_incidents(now_timestamp: float | None = None) -> int:
+    """Delete incidents whose latest recording (recordings[0]) is over retention age."""
+    now = now_timestamp if now_timestamp is not None else time.time()
+    cutoff = now - (Config.INCIDENT_RETENTION_MINUTES * 60)
+    return incident_service.delete_incidents_with_latest_recording_before(cutoff)
+
+
+def _start_incident_cleanup_scheduler(app: Flask) -> None:
+    if app.config.get("TESTING") or not app.config.get("ENABLE_INCIDENT_CLEANUP", True):
+        return
+    interval_seconds = int(app.config["INCIDENT_CLEANUP_INTERVAL_MINUTES"]) * 60
+    if interval_seconds <= 0:
+        raise ValueError("INCIDENT_CLEANUP_INTERVAL_MINUTES must be greater than 0")
+
+    def _cleanup_loop() -> None:
+        while True:
+            time.sleep(interval_seconds)
+            with app.app_context():
+                deleted_count = delete_old_incidents()
+                app.logger.info("incident cleanup removed %s incidents", deleted_count)
+
+    worker = threading.Thread(
+        target=_cleanup_loop,
+        name="incident-cleanup-scheduler",
+        daemon=True,
+    )
+    worker.start()
 
 
 def create_app(test_config: dict | None = None, mongo_client=None) -> Flask:
@@ -24,5 +56,6 @@ def create_app(test_config: dict | None = None, mongo_client=None) -> Flask:
     app.register_blueprint(incidents_bp)
     app.register_blueprint(pipeline_bp)
     app.register_blueprint(radio_bp)
+    _start_incident_cleanup_scheduler(app)
 
     return app

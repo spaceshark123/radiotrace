@@ -66,8 +66,25 @@ def get_incident(incident_id: int) -> dict[str, Any] | None:
 def append_recording(incident_id: int, recording: dict) -> dict[str, Any] | None:
     result = _collection().find_one_and_update(
         {"id": incident_id},
-        {"$push": {"recordings": recording}},
+        {"$push": {"recordings": {"$each": [recording], "$position": 0}}},
         return_document=ReturnDocument.AFTER,
         projection={"_id": 0},
     )
     return serialize(result) if result else None
+
+
+def delete_incidents_with_latest_recording_before(cutoff_timestamp: float) -> int:
+    """Delete incidents where recordings[0] is older than cutoff_timestamp."""
+    result = _collection().delete_many(
+        {
+            "recordings.0": {"$exists": True},
+            "$or": [
+                {"recordings.0.end_time": {"$lt": cutoff_timestamp}},
+                {
+                    "recordings.0.end_time": {"$exists": False},
+                    "recordings.0.start_time": {"$lt": cutoff_timestamp},
+                },
+            ],
+        }
+    )
+    return int(result.deleted_count)
