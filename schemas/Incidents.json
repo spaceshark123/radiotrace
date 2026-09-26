@@ -1,0 +1,23 @@
+{
+    "incidents": {
+        "id": 0,
+        "recordings": [
+            "audio_file_id"
+        ],
+        "location": [
+            {
+                "google_maps": "g-maps location name",
+                "latitude": 90.0,
+                "longitude": 90.0,
+                "confidence": 0.83
+            }
+        ],
+        "type": [
+            {
+                "severity": "Severe",
+                "description": "Car crash with 2 casualties",
+                "confidence": 0.83
+            }
+        ]
+    }
+}

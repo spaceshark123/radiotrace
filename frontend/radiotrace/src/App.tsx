@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import ClipUploader from './components/ClipUploader'
 import IncidentList from './components/IncidentList'
 import IncidentMap from './components/IncidentMap'
-import LiveRadio from './components/LiveRadio'
 import {
   fetchCityConfig,
   fetchHealth,
@@ -96,7 +95,6 @@ export default function App() {
             {error ? <p className="error">{error}</p> : null}
             <IncidentList incidents={incidents} selectedId={selectedId} onSelect={onSelect} />
           </section>
-          <LiveRadio />
           <ClipUploader onComplete={() => void refresh()} />
         </aside>
       </main>

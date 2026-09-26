@@ -1,0 +1,15 @@
+{
+    "radio_clips": [
+        {
+            "hash": "audio_file_hash",
+            "systemId": "audio_file_system_id",
+            "encoding": "audio_file_encoding",
+            "filename": "audio_file_name",
+            "metadata": {
+                "start_time": 0,
+                "end_time": 0,
+                "transcript": ""
+            }
+        }
+    ]
+}

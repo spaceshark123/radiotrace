@@ -19,6 +19,10 @@ class AudioNotFoundError(LookupError):
 
 def audio_content_type(filename: str) -> str:
     """Return the MIME type used for a supported filename."""
+    if filename.lower().endswith(".m4a"):
+        return "audio/mp4"
+    if filename.lower().endswith(".mp3"):
+        return "audio/mpeg"
     return mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
 

@@ -6,7 +6,7 @@ bp = Blueprint("pipeline", __name__)
 
 
 @bp.post("/api/pipeline/process")
-def process_clip():
+def process_clip_endpoint():
     uploaded = request.files.get("file") or request.files.get("audio")
     if uploaded is None:
         return jsonify({"error": "multipart field 'file' is required"}), 400

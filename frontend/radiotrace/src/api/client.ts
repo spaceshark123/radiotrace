@@ -48,15 +48,26 @@ export async function seedDemoIncidents(): Promise<Incident[]> {
 }
 
 export interface IncomingClip {
+  id: string
   filename: string
-  hash: string
-  system_id: string
   encoding: 'mp3' | 'm4a'
   status: 'discovered' | 'fetched' | 'error'
   size?: number
   contentType?: string
   objectUrl?: string
   error?: string
+}
+
+export interface RadioClip {
+  id: string
+  filename: string
+  encoding: 'mp3' | 'm4a'
+  metadata: {
+    start_time: number
+    end_time: number
+    transcript: string
+  }
+  audio_url: string
 }
 
 export async function fetchIncomingClipNames(): Promise<IncomingClip[]> {
@@ -71,15 +82,19 @@ export async function fetchIncomingClipNames(): Promise<IncomingClip[]> {
   return body.files ?? []
 }
 
+export async function fetchClip(clipId: string): Promise<RadioClip> {
+  const response = await fetch(`${API_BASE}/radio/clips/${encodeURIComponent(clipId)}`)
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+  return response.json() as Promise<RadioClip>
+}
+
 export async function fetchIncomingClip(clip: IncomingClip): Promise<Response> {
-  const params = new URLSearchParams({
-    hash: clip.hash,
-    system_id: clip.system_id,
-    filename: clip.filename,
-    encoding: clip.encoding,
-  })
-  const separator = RADIO_CLIP_FILE_URL.includes('?') ? '&' : '?'
-  const response = await fetch(`${RADIO_CLIP_FILE_URL}${separator}${params.toString()}`)
+  const separator = RADIO_CLIP_FILE_URL.endsWith('/') ? '' : '/'
+  const response = await fetch(
+    `${RADIO_CLIP_FILE_URL}${separator}${encodeURIComponent(clip.id)}`,
+  )
   if (!response.ok) {
     throw new Error(await parseError(response))
   }
@@ -91,7 +106,7 @@ export async function fetchIncomingClip(clip: IncomingClip): Promise<Response> {
 }
 
 export function audioUrl(fileId: string): string {
-  return `${API_BASE}/audio/${fileId}`
+  return `${API_BASE}/radio/clips/file/${fileId}`
 }
 
 export function liveStreamUrl(): string {

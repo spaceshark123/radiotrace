@@ -1,8 +1,8 @@
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify
 
 from app.config import Config
-from app.services import broadcastify_service
-from app.services.broadcastify_service import BroadcastifyError, client as BroadcastifyClient
+from app.services import broadcastify_service, clip_service, radio_ingestion
+from app.services.broadcastify_service import BroadcastifyError
 
 bp = Blueprint("radio", __name__)
 
@@ -18,38 +18,38 @@ def radio_status():
 @bp.get("/api/radio/clips")
 def radio_clips():
     try:
-        payload = BroadcastifyClient.get_clips()
-        calls = payload.get("calls", [])
-        return jsonify(
-            [
-                {
-                    "filename": call["filename"],
-                    "hash": call["hash"],
-                    "system_id": str(call["systemId"]),
-                    "encoding": call.get("enc", "mp3"),
-                }
-                for call in calls
-                if call.get("filename") and call.get("hash") and call.get("systemId")
-            ]
-        )
-    except BroadcastifyError as exc:
-        return jsonify({"error": str(exc), "city": Config.CITY}), 502
+        return jsonify(radio_ingestion.list_clips())
+    except Exception as exc:
+        return jsonify({"error": str(exc), "city": Config.CITY}), 500
 
 
-@bp.get("/api/radio/clips/file")
-def radio_clip():
-    clip_hash = request.args.get("hash", "")
-    system_id = request.args.get("system_id", "")
-    filename = request.args.get("filename", "")
-    encoding = request.args.get("encoding", "mp3").lower()
-    if not all((clip_hash, system_id, filename)) or encoding not in {"mp3", "m4a"}:
-        return jsonify({"error": "hash, system_id, filename, and a valid encoding are required"}), 400
-
+@bp.get("/api/radio/clips/file/<audio_id>")
+def radio_clip(audio_id: str):
     try:
-        clip = BroadcastifyClient.get_clip(clip_hash, system_id, filename, encoding)
+        stored_clip = clip_service.get_clip(audio_id)
+        if stored_clip is None:
+            return jsonify({"error": "radio clip not found"}), 404
+        download_stream = clip_service.open_audio_stream(stored_clip)
+
+        def generate():
+            try:
+                while chunk := download_stream.read(8192):
+                    yield chunk
+            finally:
+                download_stream.close()
+
         return Response(
-            clip,
-            mimetype="audio/mp4" if encoding == "m4a" else "audio/mpeg",
+            generate(),
+            mimetype="audio/mp4" if stored_clip["encoding"] == "m4a" else "audio/mpeg",
         )
-    except BroadcastifyError as exc:
-        return jsonify({"error": str(exc), "city": Config.CITY}), 502
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
+@bp.get("/api/radio/clips/<clip_id>")
+def radio_clip_object(clip_id: str):
+    clip = clip_service.get_clip(clip_id)
+    if clip is None:
+        return jsonify({"error": "radio clip not found"}), 404
+    clip["audio_url"] = f"/api/radio/clips/file/{clip_id}"
+    return jsonify(clip)

@@ -7,6 +7,7 @@ from app.routes.health import bp as health_bp
 from app.routes.incidents import bp as incidents_bp
 from app.routes.pipeline import bp as pipeline_bp
 from app.routes.radio import bp as radio_bp
+from app.services import radio_ingestion
 from app.services import incident_service
 from app.services.mongo import init_mongo
 import threading
@@ -42,6 +43,33 @@ def _start_incident_cleanup_scheduler(app: Flask) -> None:
     worker.start()
 
 
+def _start_radio_ingestion_scheduler(app: Flask) -> None:
+    if app.config.get("TESTING") or not app.config.get("ENABLE_RADIO_INGESTION", True):
+        return
+    interval_seconds = float(app.config.get("RADIO_INGEST_INTERVAL_SECONDS", 10))
+    if interval_seconds <= 0:
+        raise ValueError("RADIO_INGEST_INTERVAL_SECONDS must be greater than 0")
+
+    def _ingestion_loop() -> None:
+        while True:
+            with app.app_context():
+                try:
+                    stored_count = radio_ingestion.ingest_new_clips(
+                        limit=int(app.config.get("RADIO_INGEST_LIMIT", 5))
+                    )
+                    app.logger.info("radio ingestion stored %s new clips", stored_count)
+                except Exception:
+                    app.logger.exception("radio ingestion failed")
+            time.sleep(interval_seconds)
+
+    worker = threading.Thread(
+        target=_ingestion_loop,
+        name="radio-ingestion-scheduler",
+        daemon=True,
+    )
+    worker.start()
+
+
 def create_app(test_config: dict | None = None, mongo_client=None) -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -57,5 +85,6 @@ def create_app(test_config: dict | None = None, mongo_client=None) -> Flask:
     app.register_blueprint(pipeline_bp)
     app.register_blueprint(radio_bp)
     _start_incident_cleanup_scheduler(app)
+    _start_radio_ingestion_scheduler(app)
 
     return app

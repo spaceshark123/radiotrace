@@ -1,6 +1,7 @@
 """Incident API and health checks."""
 
 import time
+import io
 
 from app import delete_old_incidents
 from app.services import incident_service
@@ -16,7 +17,7 @@ def test_health_ok(client):
 
 def test_create_and_list_incidents(client):
     payload = {
-        "recordings": [{"start_time": 1, "end_time": 2, "audio": "abc"}],
+        "recordings": ["abc"],
         "location": [
             {
                 "google_maps": "Centennial Olympic Park, Atlanta, GA",
@@ -47,7 +48,7 @@ def test_pipeline_endpoint_blank_skips_llm(client):
     response = client.post(
         "/api/pipeline/process",
         data={
-            "file": (b"\xff\xfb" + b"\x00" * 400, "blank.mp3"),
+            "file": (io.BytesIO(b"\xff\xfb" + b"\x00" * 400), "blank.mp3"),
             "start_time": "0",
             "end_time": "3",
         },
@@ -83,14 +84,14 @@ def test_delete_old_incidents_removes_only_stale_latest_recording(app):
 def test_append_recording_keeps_latest_entry_at_first_index(app):
     with app.app_context():
         incident_service.create_incident(
-            recordings=[{"start_time": 1, "end_time": 2, "audio": "first"}],
+            recordings=["first"],
             location=[],
             incident_type=[],
             incident_id=2001,
         )
 
         updated = incident_service.append_recording(
-            2001, {"start_time": 3, "end_time": 4, "audio": "newest"}
+            2001, "newest"
         )
         assert updated is not None
-        assert updated["recordings"][0]["audio"] == "newest"
+        assert updated["recordings"][0] == "newest"

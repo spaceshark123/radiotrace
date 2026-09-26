@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from uuid import uuid4
 
 from app.config import Config
 from app.services import (
     audio_analysis,
+    clip_service,
     elevenlabs_service,
     geocode_service,
-    gridfs_service,
     grok_service,
     incident_service,
 )
@@ -27,6 +28,7 @@ def process_clip(
     end_time: float,
     filename: str = "clip.mp3",
     run_llm: bool = True,
+    clip_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Persist audio immediately, then optionally run STT + LLM + geocode.
@@ -34,16 +36,15 @@ def process_clip(
     LLM steps are skipped for blank audio so we do not spend tokens on dead air.
     Processing is designed for prerecorded clips, not a live transcription loop.
     """
-    audio_id = gridfs_service.upload_mp3(
-        audio,
-        filename=filename,
-        metadata={"start_time": start_time, "end_time": end_time},
-    )
-    recording = {
-        "start_time": start_time,
-        "end_time": end_time,
-        "audio": audio_id,
-    }
+    if clip_id is None:
+        clip = clip_service.create_clip(
+            audio,
+            filename=filename,
+            source_key=f"manual:{uuid4()}",
+            metadata={"start_time": start_time, "end_time": end_time},
+        )
+        clip_id = clip["id"]
+    recording = clip_id
 
     if audio_analysis.is_blank_audio(
         audio,
@@ -81,6 +82,9 @@ def process_clip(
             "incident": incident,
             "transcript": "",
         }
+
+    if clip_id:
+        clip_service.update_metadata(clip_id, {"transcript": transcript})
 
     analysis = grok_service.analyze_transcript(transcript)
     locations: list[dict] = []

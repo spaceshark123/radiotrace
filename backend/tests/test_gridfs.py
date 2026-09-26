@@ -1,5 +1,7 @@
 """Phase 1: verify MP3 upload and retrieval through GridFSBucket."""
 
+import io
+
 from app.services import gridfs_service
 from tests.conftest import VARIED_MP3
 
@@ -15,7 +17,7 @@ def test_gridfs_upload_and_download_roundtrip(app):
 def test_audio_http_upload_and_stream(client):
     response = client.post(
         "/api/audio",
-        data={"file": (VARIED_MP3, "clip.mp3")},
+        data={"file": (io.BytesIO(VARIED_MP3), "clip.mp3")},
         content_type="multipart/form-data",
     )
     assert response.status_code == 201
@@ -30,7 +32,7 @@ def test_audio_http_upload_and_stream(client):
 def test_m4a_upload_and_stream_preserves_audio_type(client):
     response = client.post(
         "/api/audio",
-        data={"file": (VARIED_MP3, "clip.m4a")},
+        data={"file": (io.BytesIO(VARIED_MP3), "clip.m4a")},
         content_type="multipart/form-data",
     )
     assert response.status_code == 201

@@ -1,11 +1,5 @@
 export type Severity = 'Severe' | 'Moderate' | 'Minor' | 'Unknown'
 
-export interface Recording {
-  start_time: number
-  end_time: number
-  audio: string
-}
-
 export interface IncidentLocation {
   google_maps: string
   latitude: number
@@ -21,7 +15,7 @@ export interface IncidentType {
 
 export interface Incident {
   id: number
-  recordings: Recording[]
+  recordings: string[]
   location: IncidentLocation[]
   type: IncidentType[]
 }
