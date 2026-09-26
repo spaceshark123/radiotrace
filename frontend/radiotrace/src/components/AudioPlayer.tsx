@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import { audioUrl, fetchClip, type RadioClip } from '../api/client'
 
 interface Props {
@@ -6,60 +6,49 @@ interface Props {
 }
 
 export default function AudioPlayer({ recordings }: Props) {
-  const [clips, setClips] = useState<RadioClip[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const clipIds = recordings.filter(Boolean)
-
-    if (clipIds.length === 0) {
-      setClips([])
-      return () => {
-        cancelled = true
-      }
-    }
-
-    Promise.all(clipIds.map((clipId) => fetchClip(clipId)))
-      .then((loadedClips) => {
-        if (!cancelled) {
-          setClips(loadedClips)
-          setError(null)
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Unable to load incident clips')
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [recordings])
+  const [clips, setClips] = useState<Record<string, RadioClip>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const loadingIds = useRef(new Set<string>())
 
   if (recordings.length === 0) {
     return <p className="muted">No replay audio stored for this incident.</p>
   }
 
-  if (error) {
-    return <p className="error">{error}</p>
+  async function loadClip(clipId: string) {
+    if (clips[clipId] || loadingIds.current.has(clipId)) {
+      return
+    }
+    loadingIds.current.add(clipId)
+    try {
+      const clip = await fetchClip(clipId)
+      setClips((current) => ({ ...current, [clipId]: clip }))
+    } catch (err) {
+      setErrors((current) => ({
+        ...current,
+        [clipId]: err instanceof Error ? err.message : 'Unable to load clip details',
+      }))
+    } finally {
+      loadingIds.current.delete(clipId)
+    }
   }
 
   return (
     <div className="replay">
-      {clips.length === 0 ? <p className="muted">Loading incident clips…</p> : null}
-      {clips.map((clip) => (
-        <figure key={clip.id}>
-          <figcaption>{clip.filename}</figcaption>
+      {recordings.filter(Boolean).map((clipId) => {
+        const clip = clips[clipId]
+        return (
+        <figure key={clipId}>
+          <figcaption>{clip?.filename ?? `Clip ${clipId}`}</figcaption>
           <p className="muted small">
-            {clip.metadata.transcript || 'No transcript available.'}
+            {clip?.metadata.transcript ?? 'Transcript loads when played.'}
           </p>
-          <audio controls preload="none" src={audioUrl(clip.id)}>
+          {errors[clipId] ? <p className="error small">{errors[clipId]}</p> : null}
+          <audio controls preload="none" src={audioUrl(clipId)} onPlay={() => void loadClip(clipId)}>
             Your browser does not support audio playback.
           </audio>
         </figure>
-      ))}
+        )
+      })}
     </div>
   )
 }
