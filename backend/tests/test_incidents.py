@@ -1,5 +1,11 @@
 """Incident API and health checks."""
 
+import time
+
+from app import delete_old_incidents
+from app.services import incident_service
+
+
 def test_health_ok(client):
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -49,3 +55,42 @@ def test_pipeline_endpoint_blank_skips_llm(client):
     )
     assert response.status_code == 200
     assert response.get_json()["status"] == "skipped_blank_audio"
+
+
+def test_delete_old_incidents_removes_only_stale_latest_recording(app):
+    now = time.time()
+    with app.app_context():
+        incident_service.create_incident(
+            recordings=[{"start_time": now - 4000, "end_time": now - 3900, "audio": "old"}],
+            location=[],
+            incident_type=[],
+            incident_id=1001,
+        )
+        incident_service.create_incident(
+            recordings=[{"start_time": now - 1200, "end_time": now - 1100, "audio": "recent"}],
+            location=[],
+            incident_type=[],
+            incident_id=1002,
+        )
+
+        deleted = delete_old_incidents(now_timestamp=now)
+        assert deleted == 1
+
+        remaining_ids = {incident["id"] for incident in incident_service.list_incidents()}
+        assert remaining_ids == {1002}
+
+
+def test_append_recording_keeps_latest_entry_at_first_index(app):
+    with app.app_context():
+        incident_service.create_incident(
+            recordings=[{"start_time": 1, "end_time": 2, "audio": "first"}],
+            location=[],
+            incident_type=[],
+            incident_id=2001,
+        )
+
+        updated = incident_service.append_recording(
+            2001, {"start_time": 3, "end_time": 4, "audio": "newest"}
+        )
+        assert updated is not None
+        assert updated["recordings"][0]["audio"] == "newest"

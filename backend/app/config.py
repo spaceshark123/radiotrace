@@ -7,6 +7,13 @@ def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = _env(name)
+    if value == "":
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
 class Config:
     """Runtime settings for RadioTrace (Atlanta-focused)."""
 
@@ -41,3 +48,8 @@ class Config:
     HTTP_TIMEOUT_SECONDS = float(_env("HTTP_TIMEOUT_SECONDS", "20"))
     BLANK_AUDIO_MIN_BYTES = int(_env("BLANK_AUDIO_MIN_BYTES", "2048"))
     BLANK_AUDIO_MIN_UNIQUE_BYTES = int(_env("BLANK_AUDIO_MIN_UNIQUE_BYTES", "8"))
+    INCIDENT_RETENTION_MINUTES = int(_env("INCIDENT_RETENTION_MINUTES", "60"))
+    INCIDENT_CLEANUP_INTERVAL_MINUTES = int(
+        _env("INCIDENT_CLEANUP_INTERVAL_MINUTES", "20")
+    )
+    ENABLE_INCIDENT_CLEANUP = _env_bool("ENABLE_INCIDENT_CLEANUP", True)
