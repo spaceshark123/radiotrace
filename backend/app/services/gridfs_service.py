@@ -1,8 +1,9 @@
-"""GridFS helpers for MP3 upload, metadata, and streaming retrieval."""
+"""GridFS helpers for uploading and streaming supported audio formats."""
 
 from __future__ import annotations
 
 import io
+import mimetypes
 from typing import BinaryIO
 
 from bson import ObjectId
@@ -16,18 +17,23 @@ class AudioNotFoundError(LookupError):
     """Raised when a GridFS audio document does not exist."""
 
 
+def audio_content_type(filename: str) -> str:
+    """Return the MIME type used for a supported filename."""
+    return mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+
 def upload_mp3(
     data: bytes | BinaryIO,
     filename: str = "clip.mp3",
     metadata: dict | None = None,
 ) -> str:
-    """Store MP3 bytes in GridFS and return the file id as a hex string."""
+    """Store audio bytes in GridFS and return the file id as a hex string."""
     bucket = get_gridfs_bucket()
     stream = data if hasattr(data, "read") else io.BytesIO(data)
     file_id = bucket.upload_from_stream(
         filename,
         stream,
-        metadata={"contentType": "audio/mpeg", **(metadata or {})},
+        metadata={"contentType": audio_content_type(filename), **(metadata or {})},
     )
     return str(file_id)
 

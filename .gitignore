@@ -12,3 +12,6 @@ frontend/radiotrace/node_modules/
 
 # Local database data
 mongo-data/
+
+# test clips
+test-clips/

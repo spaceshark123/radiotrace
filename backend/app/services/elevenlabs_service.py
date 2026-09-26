@@ -16,7 +16,7 @@ class ElevenLabsError(RuntimeError):
 
 
 def transcribe_mp3(audio: bytes, filename: str = "clip.mp3") -> str:
-    """Send MP3 bytes to ElevenLabs STT and return the transcript text."""
+    """Send supported audio bytes to ElevenLabs STT and return the transcript."""
     if not Config.ELEVENLABS_API_KEY:
         raise ElevenLabsError("ELEVENLABS_API_KEY is not configured")
 
@@ -26,7 +26,7 @@ def transcribe_mp3(audio: bytes, filename: str = "clip.mp3") -> str:
             url,
             headers={"xi-api-key": Config.ELEVENLABS_API_KEY},
             data={"model_id": Config.ELEVENLABS_STT_MODEL},
-            files={"file": (filename, audio, "audio/mpeg")},
+            files={"file": (filename, audio, _content_type(filename))},
             timeout=Config.HTTP_TIMEOUT_SECONDS,
         )
     except requests.Timeout as exc:
@@ -44,3 +44,10 @@ def transcribe_mp3(audio: bytes, filename: str = "clip.mp3") -> str:
     if isinstance(text, dict):
         text = text.get("text", "")
     return str(text).strip()
+
+
+def _content_type(filename: str) -> str:
+    """Use the MIME type expected by ElevenLabs for the uploaded extension."""
+    if filename.lower().endswith(".m4a"):
+        return "audio/mp4"
+    return "audio/mpeg"

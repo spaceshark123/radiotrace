@@ -38,6 +38,6 @@ def stream_audio(file_id: str):
 
     return Response(
         generate(),
-        mimetype="audio/mpeg",
-        headers={"Content-Disposition": f'inline; filename="{file_id}.mp3"'},
+        mimetype=download_stream.metadata.get("contentType", "audio/mpeg"),
+        headers={"Content-Disposition": f'inline; filename="{download_stream.filename}"'},
     )

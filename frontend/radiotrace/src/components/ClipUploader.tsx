@@ -15,7 +15,7 @@ export default function ClipUploader({ onComplete }: Props) {
     const fileInput = form.elements.namedItem('clip') as HTMLInputElement
     const file = fileInput.files?.[0]
     if (!file) {
-      setMessage('Choose an MP3 clip first.')
+      setMessage('Choose an MP3 or M4A clip first.')
       return
     }
     const start = Number((form.elements.namedItem('start_time') as HTMLInputElement).value)
@@ -42,8 +42,8 @@ export default function ClipUploader({ onComplete }: Props) {
         is stored but does not call the LLM.
       </p>
       <label>
-        MP3 file
-        <input name="clip" type="file" accept="audio/mpeg,.mp3" />
+        MP3 or M4A file
+        <input name="clip" type="file" accept="audio/mpeg,.mp3,audio/mp4,.m4a" />
       </label>
       <div className="row">
         <label>
