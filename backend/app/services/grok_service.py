@@ -13,19 +13,39 @@ from app.config import Config
 logger = logging.getLogger(__name__)
 
 GROK_SYSTEM_PROMPT = """You are RadioTrace, a public-safety analyst for Atlanta, Georgia police radio.
-Given a radio transcript, return ONLY compact JSON with keys:
-severity (one of Severe, Moderate, Minor),
-description (one short sentence),
-confidence (number 0-1),
-location (street, intersection, or neighborhood in Atlanta, GA; empty string if unknown).
-Do not include markdown. Save tokens: no preamble."""
+Given a radio transcript, extract the incident fields described by the response schema.
+Do not include markdown or a preamble."""
+
+GROK_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "radio_incident",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "severity": {
+                    "type": "string",
+                    "enum": ["Severe", "Moderate", "Minor"],
+                },
+                "description": {"type": "string"},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "location": {"type": "string"},
+            },
+            "required": ["severity", "description", "confidence", "location"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 class GrokError(RuntimeError):
     """Raised when the Grok API call or JSON parse fails."""
 
 
-def _extract_json(text: str) -> dict:
+def _extract_json(text: str | dict) -> dict:
+    if isinstance(text, dict):
+        return text
     stripped = text.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", stripped, re.DOTALL)
     if fenced:
@@ -35,7 +55,10 @@ def _extract_json(text: str) -> dict:
         end = stripped.rfind("}")
         if start != -1 and end != -1:
             stripped = stripped[start : end + 1]
-    return json.loads(stripped)
+    parsed = json.loads(stripped)
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("Grok output must be a JSON object", stripped, 0)
+    return parsed
 
 
 def analyze_transcript(transcript: str) -> dict:
@@ -50,6 +73,7 @@ def analyze_transcript(transcript: str) -> dict:
         "model": Config.GROK_MODEL,
         "temperature": 0,
         "max_tokens": 220,
+        "response_format": GROK_RESPONSE_FORMAT,
         "messages": [
             {"role": "system", "content": GROK_SYSTEM_PROMPT},
             {"role": "user", "content": transcript[:4000]},

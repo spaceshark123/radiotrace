@@ -74,6 +74,12 @@ def test_grok_json_extraction():
         mocked.return_value.json.return_value = sample
         with patch.object(grok_service.Config, "XAI_API_KEY", "test-key"):
             parsed = grok_service.analyze_transcript("units on scene at five points")
+    request_body = mocked.call_args.kwargs["json"]
+    response_format = request_body["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "radio_incident"
+    assert response_format["json_schema"]["strict"] is True
+    assert response_format["json_schema"]["schema"]["additionalProperties"] is False
     assert parsed["severity"] == "Moderate"
     assert parsed["location"] == "Five Points"
     assert parsed["confidence"] == 0.7
