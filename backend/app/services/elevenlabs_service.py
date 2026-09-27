@@ -10,10 +10,32 @@ from app.config import Config
 
 logger = logging.getLogger(__name__)
 
+# Key terms to help the ElevenLabs STT model focus on relevant words in police radio clips.
+keyterms = [
+    "police", 
+    "officer", 
+    "emergency", 
+    "911", 
+    "suspect",
+    "crime", 
+    "dispatch", 
+    "Atlanta", 
+    "Georgia", 
+    "accident", 
+    "shooting", 
+    "robbery", 
+    "theft", 
+    "fire", 
+    "medical", 
+    "hospital", 
+    "ambulance", 
+    "shot", 
+    "paramedic", 
+    "help"
+]
 
 class ElevenLabsError(RuntimeError):
     """Raised when transcription fails after defensive retries are exhausted."""
-
 
 def transcribe_mp3(audio: bytes, filename: str = "clip.mp3") -> str:
     """Send supported audio bytes to ElevenLabs STT and return the transcript."""
@@ -27,6 +49,8 @@ def transcribe_mp3(audio: bytes, filename: str = "clip.mp3") -> str:
             headers={"xi-api-key": Config.ELEVENLABS_API_KEY},
             data={"model_id": Config.ELEVENLABS_STT_MODEL},
             files={"file": (filename, audio, _content_type(filename))},
+            language_code="en",
+            keyterms=keyterms,
             timeout=Config.HTTP_TIMEOUT_SECONDS,
         )
     except requests.Timeout as exc:
