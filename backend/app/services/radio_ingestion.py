@@ -56,6 +56,8 @@ def ingest_new_clips(limit: int = 5) -> int:
                 "hash": clip["hash"],
                 "systemId": clip["systemId"],
                 "encoding": encoding,
+                "start_time": clip.get("meta_starttime"),
+                "end_time": clip.get("meta_endtime")
             },
         )
         stored_count += 1
