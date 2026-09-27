@@ -13,7 +13,7 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
-      MONGO_URI: mongodb://mongo:27017
+      MONGO_URI: ${MONGO_URI:-mongodb://localhost:27017}
       MONGO_DATABASE: ${MONGO_DATABASE:-radiotrace}
       CITY: ${CITY:-Atlanta}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
