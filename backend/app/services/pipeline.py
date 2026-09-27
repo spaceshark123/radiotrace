@@ -129,7 +129,7 @@ def process_clip(
         target_lon = locations[0]["longitude"]
 
         # Step 1: Broad Filter (Find recent candidates within a ~500m radius and 1 hour window)
-        candidate_incidents = incident_service.find_matching_incidents_by_coordinates(
+        candidate_incidents = incident_service.find_matching_incidents(
             lat=target_lat,
             lon=target_lon,
             max_distance_deg=0.005,  # Radius threshold (~500 meters)
