@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from app import run_radio_ingestion_poll
 from app.services import radio_ingestion
 from tests.conftest import VARIED_MP3
 
@@ -34,3 +35,13 @@ def test_ingest_new_clips_stores_audio_and_deduplicates(app):
 
         get_clip.assert_called_once_with("clip-hash", "6204", "1790455000-10020", "m4a")
         process_clip.assert_called_once()
+
+
+def test_run_radio_ingestion_poll_prints_completion(app, capsys):
+    with app.app_context():
+        with patch("app.services.radio_ingestion.ingest_new_clips", return_value=2):
+            assert run_radio_ingestion_poll(app) == 2
+
+    captured = capsys.readouterr()
+    assert "[radio-ingestion] poll starting" in captured.out
+    assert "poll complete stored=2" in captured.out

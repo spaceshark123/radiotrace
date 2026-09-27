@@ -1,3 +1,7 @@
+import logging
+import threading
+import time
+
 from flask import Flask
 from flask_cors import CORS
 
@@ -7,11 +11,9 @@ from app.routes.health import bp as health_bp
 from app.routes.incidents import bp as incidents_bp
 from app.routes.pipeline import bp as pipeline_bp
 from app.routes.radio import bp as radio_bp
-from app.services import radio_ingestion
 from app.services import incident_service
+from app.services import radio_ingestion
 from app.services.mongo import init_mongo
-import threading
-import time
 
 
 def delete_old_incidents(now_timestamp: float | None = None) -> int:
@@ -43,6 +45,23 @@ def _start_incident_cleanup_scheduler(app: Flask) -> None:
     worker.start()
 
 
+def run_radio_ingestion_poll(app: Flask) -> int:
+    """Run one ingestion cycle and emit Docker-visible progress."""
+    started = time.monotonic()
+    print("[radio-ingestion] poll starting", flush=True)
+    app.logger.info("radio ingestion poll starting")
+    stored_count = radio_ingestion.ingest_new_clips(
+        limit=int(app.config.get("RADIO_INGEST_LIMIT", 5))
+    )
+    elapsed = time.monotonic() - started
+    print(
+        f"[radio-ingestion] poll complete stored={stored_count} elapsed={elapsed:.1f}s",
+        flush=True,
+    )
+    app.logger.info("radio ingestion stored %s new clips", stored_count)
+    return stored_count
+
+
 def _start_radio_ingestion_scheduler(app: Flask) -> None:
     if app.config.get("TESTING") or not app.config.get("ENABLE_RADIO_INGESTION", True):
         return
@@ -52,17 +71,15 @@ def _start_radio_ingestion_scheduler(app: Flask) -> None:
 
     def _ingestion_loop() -> None:
         while True:
+            started = time.monotonic()
             with app.app_context():
                 try:
-                    print("[radio-ingestion] poll starting", flush=True)
-                    app.logger.info("radio ingestion poll starting")
-                    stored_count = radio_ingestion.ingest_new_clips(
-                        limit=int(app.config.get("RADIO_INGEST_LIMIT", 5))
-                    )
-                    app.logger.info("radio ingestion stored %s new clips", stored_count)
-                except Exception:
+                    run_radio_ingestion_poll(app)
+                except Exception as exc:
+                    print(f"[radio-ingestion] poll failed: {exc}", flush=True)
                     app.logger.exception("radio ingestion failed")
-            time.sleep(interval_seconds)
+            elapsed = time.monotonic() - started
+            time.sleep(max(0.0, interval_seconds - elapsed))
 
     worker = threading.Thread(
         target=_ingestion_loop,
@@ -82,6 +99,12 @@ def create_app(test_config: dict | None = None, mongo_client=None) -> Flask:
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)
+
+    if not app.testing and not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
 
     CORS(app)
     init_mongo(app, client=mongo_client)

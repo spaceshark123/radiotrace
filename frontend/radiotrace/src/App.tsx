@@ -40,7 +40,7 @@ export default function App() {
     void refresh()
     const timer = window.setInterval(() => {
       void refresh()
-    }, 15000)
+    }, 2000)
     return () => window.clearInterval(timer)
   }, [refresh])
 

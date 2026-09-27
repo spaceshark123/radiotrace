@@ -33,11 +33,13 @@ def get_clip(clip_id: str) -> dict[str, Any] | None:
 
 def ingest_new_clips(limit: int = 5) -> int:
     # get the latest clips
-    logger.info("fetching up to %s current Broadcastify clips", limit)
+    logger.info("fetching all current Broadcastify clips")
     payload = broadcastify_service.client.get_clips()
     logger.info("Broadcastify returned %s current clips", len(payload.get("calls", [])))
     stored_count = 0
-    for clip in payload.get("calls", [])[:limit]:
+    total_count = 0
+    for clip in payload.get("calls", []):
+        total_count += 1
         if not all((clip.get("hash"), clip.get("systemId"), clip.get("filename"))):
             continue
 
@@ -68,12 +70,16 @@ def ingest_new_clips(limit: int = 5) -> int:
                 "systemId": clip["systemId"],
                 "encoding": encoding,
             },
-            run_llm=True,
+            run_llm=True
         )
         if result.get("status", "").startswith("discarded"):
             _rejected_source_keys.add(key)
         else:
             stored_count += 1
     logger.info("Newly stored clips: %s", stored_count)
-    logger.info("Rejected clips: %s", len(_rejected_source_keys))
+    logger.info("Rejected clips: %s", total_count - stored_count)
+    print(
+        f"[radio-ingestion] stored={stored_count} rejected={total_count - stored_count}",
+        flush=True,
+    )
     return stored_count
