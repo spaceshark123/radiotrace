@@ -11,7 +11,7 @@ export default function IncidentList({ incidents, selectedId, onSelect }: Props)
   if (incidents.length === 0) {
     return (
       <p className="muted">
-        No incidents yet. Seed Atlanta demo data or upload a radio clip to populate the map.
+        No incidents yet. 
       </p>
     )
   }

@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from app.services import audio_analysis, grok_service, pipeline
+from app.services import elevenlabs_service
 from tests.conftest import BLANK_MP3, VARIED_MP3
 
 
@@ -150,3 +151,17 @@ def test_irrelevant_clip_is_discarded_before_storage(app):
 def test_is_blank_audio_detects_uniform_payload():
     assert audio_analysis.is_blank_audio(BLANK_MP3) is True
     assert audio_analysis.is_blank_audio(VARIED_MP3) is False
+
+
+def test_elevenlabs_options_are_multipart_fields():
+    response = type("Response", (), {"ok": True, "json": lambda self: {"text": "test transcript"}})()
+    with patch("app.services.elevenlabs_service.requests.post", return_value=response) as post:
+        with patch.object(elevenlabs_service.Config, "ELEVENLABS_API_KEY", "test-key"):
+            result = elevenlabs_service.transcribe_mp3(VARIED_MP3, filename="clip.m4a")
+
+    assert result == "test transcript"
+    request_kwargs = post.call_args.kwargs
+    assert request_kwargs["data"]["language_code"] == "en"
+    assert request_kwargs["data"]["keyterms"] == elevenlabs_service.keyterms
+    assert "language_code" not in request_kwargs
+    assert "keyterms" not in request_kwargs

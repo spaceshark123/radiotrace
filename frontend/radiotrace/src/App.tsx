@@ -5,8 +5,7 @@ import IncidentMap from './components/IncidentMap'
 import {
   fetchCityConfig,
   fetchHealth,
-  fetchIncidents,
-  seedDemoIncidents,
+  fetchIncidents
 } from './api/client'
 import type { CityConfig, Incident } from './types/incident'
 import './App.css'
@@ -53,16 +52,6 @@ export default function App() {
     })
   }, [selectedId])
 
-  async function loadDemo() {
-    try {
-      const items = await seedDemoIncidents()
-      setIncidents(items)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Seed failed')
-    }
-  }
-
   function onSelect(incident: Incident) {
     setSelectedId(incident.id)
   }
@@ -94,11 +83,8 @@ export default function App() {
             <header className="alerts-header">
               <div>
                 <h2>Crime notices</h2>
-                <p className="muted">Severity and trust scores from Grok analysis.</p>
+                <p className="muted">Incident reports based on live Atlanta PD radio feeds</p>
               </div>
-              <button type="button" onClick={() => void loadDemo()}>
-                Seed Atlanta demo
-              </button>
             </header>
             {error ? <p className="error">{error}</p> : null}
             <IncidentList incidents={incidents} selectedId={selectedId} onSelect={onSelect} />

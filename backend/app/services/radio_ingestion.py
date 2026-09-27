@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from app.services import broadcastify_service, clip_service, pipeline
 
+logger = logging.getLogger(__name__)
 
 _rejected_source_keys: set[str] = set()
 
@@ -31,7 +33,9 @@ def get_clip(clip_id: str) -> dict[str, Any] | None:
 
 def ingest_new_clips(limit: int = 5) -> int:
     # get the latest clips
+    logger.info("fetching up to %s current Broadcastify clips", limit)
     payload = broadcastify_service.client.get_clips()
+    logger.info("Broadcastify returned %s current clips", len(payload.get("calls", [])))
     stored_count = 0
     for clip in payload.get("calls", [])[:limit]:
         if not all((clip.get("hash"), clip.get("systemId"), clip.get("filename"))):
@@ -70,4 +74,6 @@ def ingest_new_clips(limit: int = 5) -> int:
             _rejected_source_keys.add(key)
         else:
             stored_count += 1
+    logger.info("Newly stored clips: %s", stored_count)
+    logger.info("Rejected clips: %s", len(_rejected_source_keys))
     return stored_count

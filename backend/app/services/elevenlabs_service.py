@@ -47,10 +47,12 @@ def transcribe_mp3(audio: bytes, filename: str = "clip.mp3") -> str:
         response = requests.post(
             url,
             headers={"xi-api-key": Config.ELEVENLABS_API_KEY},
-            data={"model_id": Config.ELEVENLABS_STT_MODEL},
+            data={
+                "model_id": Config.ELEVENLABS_STT_MODEL,
+                "language_code": "en",
+                "keyterms": keyterms,
+            },
             files={"file": (filename, audio, _content_type(filename))},
-            language_code="en",
-            keyterms=keyterms,
             timeout=Config.HTTP_TIMEOUT_SECONDS,
         )
     except requests.Timeout as exc:

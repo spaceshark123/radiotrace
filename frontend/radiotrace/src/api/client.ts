@@ -38,15 +38,6 @@ export async function fetchIncidents(): Promise<Incident[]> {
   return body.incidents
 }
 
-export async function seedDemoIncidents(): Promise<Incident[]> {
-  const response = await fetch(`${API_BASE}/incidents/seed`, { method: 'POST' })
-  if (!response.ok) {
-    throw new Error(await parseError(response))
-  }
-  const body = (await response.json()) as { incidents: Incident[] }
-  return body.incidents
-}
-
 export interface IncomingClip {
   id: string
   filename: string

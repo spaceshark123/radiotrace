@@ -54,6 +54,8 @@ def _start_radio_ingestion_scheduler(app: Flask) -> None:
         while True:
             with app.app_context():
                 try:
+                    print("[radio-ingestion] poll starting", flush=True)
+                    app.logger.info("radio ingestion poll starting")
                     stored_count = radio_ingestion.ingest_new_clips(
                         limit=int(app.config.get("RADIO_INGEST_LIMIT", 5))
                     )
@@ -68,6 +70,11 @@ def _start_radio_ingestion_scheduler(app: Flask) -> None:
         daemon=True,
     )
     worker.start()
+    print(
+        f"[radio-ingestion] scheduler started; interval={interval_seconds}s",
+        flush=True,
+    )
+    app.logger.info("radio ingestion scheduler started with %.1fs interval", interval_seconds)
 
 
 def create_app(test_config: dict | None = None, mongo_client=None) -> Flask:

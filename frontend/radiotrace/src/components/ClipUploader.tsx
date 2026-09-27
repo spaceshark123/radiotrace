@@ -38,8 +38,7 @@ export default function ClipUploader({ onComplete }: Props) {
     <form className="panel uploader" onSubmit={onSubmit}>
       <h2>Analyze a recorded clip</h2>
       <p className="muted">
-        Offline pipeline: ElevenLabs transcript, Grok incident parse, Google geocode. Blank audio
-        is stored but does not call the LLM.
+        Offline processing: uploaded clips are analyzed without sending data to external services.
       </p>
       <label>
         MP3 or M4A file

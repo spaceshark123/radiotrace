@@ -25,6 +25,7 @@ class BroadcastifyGuestClient:
     
     def __init__(self):
         self.base_url = "https://www.broadcastify.com"
+        self.initialized = False
         self.session = requests.Session()
 
         self.session.headers.update({
@@ -40,7 +41,7 @@ class BroadcastifyGuestClient:
         self.playlist_uuid = playlist_uuid
         self.groups = groups
 
-        res = self.session.get(url)
+        res = self.session.get(url, timeout=Config.HTTP_TIMEOUT_SECONDS)
 
         session_key = str(uuid.uuid4())[:13]
         pos = 0
@@ -62,6 +63,11 @@ class BroadcastifyGuestClient:
         last_current_time = self.last_current_time
 
         try:
+            if not self.initialized:
+                logger.info("initializing Broadcastify playlist session")
+                self.init_playlist(PLAYLIST_UUID, GROUPS_STRING)
+                self.initialized = True
+
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:144.0) Gecko/20100101 Firefox/144.0',
                 'Accept': '*/*',
@@ -167,4 +173,3 @@ PLAYLIST_UUID = "4c5b16b0-2974-11ef-9e04-0e98d5b32039"
 GROUPS_STRING = "8198-10020,5834-19759,5834-19753,5834-19743,5834-19741,5834-19735,5834-19727,5834-19894,5834-19314,8340-61801,5834-19390,8340-52001,8340-51101,8340-53001,5834-19435,5834-19355,5834-19334,8340-61901,5834-19875,8340-61201,8198-10190,8198-10191,8198-10270,8340-61001,8340-51001,5834-19441,5834-19439"
 
 client = BroadcastifyGuestClient()
-session_key, current_pos = client.init_playlist(PLAYLIST_UUID, GROUPS_STRING)
