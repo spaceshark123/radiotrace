@@ -42,12 +42,16 @@ class BroadcastifyGuestClient:
         self.groups = groups
 
         res = self.session.get(url, timeout=Config.HTTP_TIMEOUT_SECONDS)
+        logger.error("Broadcastify status: %s", res.status_code)
+        logger.error("Broadcastify headers: %s", dict(res.headers))
+        logger.error("Broadcastify body: %s", res.text[:1000])
         res.raise_for_status()
 
         session_key = str(uuid.uuid4())[:13]
         pos = 0
 
-        sk_match = re.search(r'var\s+sessionKey\s*=\s*[\'"]([^\'"]+)[\'"]', res.text)
+        sk_match = re.search(
+            r'var\s+sessionKey\s*=\s*[\'"]([^\'"]+)[\'"]', res.text)
         if sk_match:
             session_key = sk_match.group(1)
 
@@ -102,20 +106,23 @@ class BroadcastifyGuestClient:
                 self.initialized = True
                 # Skip historical backlog so the 10s scheduler stays live-edge.
                 primed["calls"] = []
-                logger.info("Broadcastify session primed at lastPos=%s", self.last_current_time)
+                logger.info(
+                    "Broadcastify session primed at lastPos=%s", self.last_current_time)
                 return primed
 
             pos = self.last_current_time if current_time is None else current_time
             json_response = self._post_live_calls(pos, do_init=False)
             self.last_current_time = int(
-                json_response.get("lastPos", self.last_current_time) or self.last_current_time
+                json_response.get(
+                    "lastPos", self.last_current_time) or self.last_current_time
             )
             json_response["calls"] = json_response.get("calls", [])[:5]
             return json_response
         except requests.RequestException as exc:
             self.initialized = False
             logger.error("Failed to fetch Broadcastify clips: %s", exc)
-            raise BroadcastifyError("Unable to fetch Broadcastify clips") from exc
+            raise BroadcastifyError(
+                "Unable to fetch Broadcastify clips") from exc
 
     def get_clip(
         self,
@@ -148,8 +155,10 @@ class BroadcastifyGuestClient:
             response.raise_for_status()
             return response.content
         except requests.RequestException as exc:
-            logger.error("Failed to fetch Broadcastify clip %s: %s", clip_hash, exc)
-            raise BroadcastifyError(f"Unable to fetch Broadcastify clip {clip_hash}") from exc
+            logger.error(
+                "Failed to fetch Broadcastify clip %s: %s", clip_hash, exc)
+            raise BroadcastifyError(
+                f"Unable to fetch Broadcastify clip {clip_hash}") from exc
 
 
 # atlanta police radio
