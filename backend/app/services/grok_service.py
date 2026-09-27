@@ -38,6 +38,13 @@ GROK_RESPONSE_FORMAT = {
     },
 }
 
+GROK_MATCH_PROMPT = """You are an Atlanta public-safety dispatcher. 
+Given a new radio transcript and a list of active recent incidents, determine if the new transcript belongs to ANY of the existing incidents.
+Return ONLY compact JSON with keys:
+matched_id (integer ID of the matching incident, or null if it is a brand new incident).
+reason (one short sentence explaining why).
+Do not include markdown."""
+
 
 class GrokError(RuntimeError):
     """Raised when the Grok API call or JSON parse fails."""
@@ -123,3 +130,70 @@ def analyze_transcript(transcript: str) -> dict:
         "confidence": confidence,
         "location": str(parsed.get("location", "")).strip(),
     }
+
+def match_incident(transcript: str, active_incidents: list[dict]) -> int | None:
+    """Call Grok to see if an incoming transcript matches any active incident."""
+    if not Config.XAI_API_KEY:
+        raise GrokError("XAI_API_KEY or SPACEX_AI_API_KEY is not configured")
+    if not transcript.strip() or not active_incidents:
+        return None
+
+    # Format the active incidents compactly for the LLM prompt
+    formatted_incidents = [
+        {
+            "id": inc["id"],
+            "description": inc["type"][0]["description"] if inc.get("type") else "Unknown",
+            "location": inc["location"][0]["google_maps"] if inc.get("location") else "Unknown"
+        }
+        for inc in active_incidents
+    ]
+
+    user_payload = json.dumps({
+        "new_transcript": transcript[:4000],
+        "active_incidents": formatted_incidents
+    })
+
+    url = f"{Config.XAI_API_BASE.rstrip('/')}/chat/completions"
+    body = {
+        "model": Config.GROK_MODEL,
+        "temperature": 0,
+        "max_tokens": 100,
+        "messages": [
+            {"role": "system", "content": GROK_MATCH_PROMPT},
+            {"role": "user", "content": user_payload},
+        ],
+    }
+
+    try:
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {Config.XAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=Config.HTTP_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        logger.warning(f"Grok matching request failed, falling back to new incident: {exc}")
+        return None
+
+    if not response.ok:
+        return None
+
+    payload = response.json()
+    try:
+        content = payload["choices"][0]["message"]["content"]
+        parsed = _extract_json(content)
+        matched_id = parsed.get("matched_id")
+        
+        # Ensure the matched ID actually exists in our active list
+        if matched_id is not None:
+            matched_id = int(matched_id)
+            valid_ids = {inc["id"] for inc in active_incidents}
+            if matched_id in valid_ids:
+                return matched_id
+    except Exception as exc:
+        logger.warning(f"Failed to parse Grok match response: {exc}")
+
+    return None

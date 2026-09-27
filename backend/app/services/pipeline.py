@@ -1,4 +1,4 @@
-"""Offline clip pipeline: GridFS -> blank check -> ElevenLabs -> Grok -> geocode -> incident."""
+"""Offline clip pipeline: GridFS -> blank check -> ElevenLabs -> Grok -> geocode -> spatial incident matching/creation."""
 
 from __future__ import annotations
 
@@ -32,9 +32,7 @@ def process_clip(
 ) -> dict[str, Any]:
     """
     Persist audio immediately, then optionally run STT + LLM + geocode.
-
-    LLM steps are skipped for blank audio so we do not spend tokens on dead air.
-    Processing is designed for prerecorded clips, not a live transcription loop.
+    Applies spatial coordinate matching followed by Grok semantic matching.
     """
     if clip_id is None:
         clip = clip_service.create_clip(
@@ -89,6 +87,7 @@ def process_clip(
     analysis = grok_service.analyze_transcript(transcript)
     locations: list[dict] = []
     place = analysis.get("location") or ""
+    
     if place:
         try:
             geo = geocode_service.geocode_location(place)
@@ -118,13 +117,50 @@ def process_clip(
             "confidence": analysis["confidence"],
         }
     ]
-    incident = incident_service.create_incident(
-        recordings=[recording],
-        location=locations,
-        incident_type=incident_type,
-    )
+
+    # --- TWO-TIER SPATIAL MATCHING PIPELINE ---
+    incident = None
+    status = "processed"
+
+    candidate_incidents = []
+    # Ensure we successfully geocoded valid coordinates to filter by
+    if locations and "latitude" in locations[0] and "longitude" in locations[0]:
+        target_lat = locations[0]["latitude"]
+        target_lon = locations[0]["longitude"]
+
+        # Step 1: Broad Filter (Find recent candidates within a ~500m radius and 1 hour window)
+        candidate_incidents = incident_service.find_matching_incidents_by_coordinates(
+            lat=target_lat,
+            lon=target_lon,
+            max_distance_deg=0.005,  # Radius threshold (~500 meters)
+            max_age_minutes=60
+        )
+
+    # Step 2: Fine-Grained Match (Use Grok to decide if transcript belongs to any spatially close candidate)
+    matched_id = None
+    if candidate_incidents and transcript:
+        matched_id = grok_service.match_incident(transcript, candidate_incidents)
+
+    # Step 3: Branch based on Grok's matching result
+    if matched_id is not None:
+        incident = incident_service.append_recording(
+            incident_id=matched_id,
+            recording=recording,
+            severity=analysis["severity"]
+        )
+        status = "matched_and_updated"
+    else:
+        incident = incident_service.create_incident(
+            recordings=[recording],
+            location=locations,
+            incident_type=incident_type,
+            severity=analysis["severity"],
+            confidence=analysis["confidence"],
+        )
+        status = "processed"
+
     return {
-        "status": "processed",
+        "status": status,
         "incident": incident,
         "transcript": transcript,
     }

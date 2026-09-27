@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-
+from datetime import datetime, timedelta, timezone
 from pymongo import ReturnDocument
 
 from app.services import clip_service
@@ -34,21 +34,64 @@ def serialize(doc: dict[str, Any]) -> dict[str, Any]:
         "recordings": [str(recording) for recording in doc.get("recordings", [])],
         "location": doc.get("location", []),
         "type": doc.get("type", []),
+        "severity": doc.get("severity", "Unknown"),
+        "confidence": doc.get("confidence", 0.0),
+        "last_updated": doc.get("last_updated"),
     }
+
+def find_matching_incidents(
+    lat: float, 
+    lon: float, 
+    max_distance_deg: float = 0.005, 
+    max_age_minutes: int = 60
+) -> list[dict[str, Any]]:
+    """
+    Broad Filter: Finds recent incidents whose stored latitude and longitude 
+    fall within a geographic bounding box threshold and time window.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    
+    # Define a bounding box around the target coordinates
+    lat_min = lat - max_distance_deg
+    lat_max = lat + max_distance_deg
+    lon_min = lon - max_distance_deg
+    lon_max = lon + max_distance_deg
+
+    docs = _collection().find(
+        {
+            "location": {
+                "$elemMatch": {
+                    "latitude": {"$gte": lat_min, "$lte": lat_max},
+                    "longitude": {"$gte": lon_min, "$lte": lon_max}
+                }
+            },
+            "last_updated": {"$gte": threshold}
+        },
+        {"_id": 0}
+    ).sort("id", -1)
+    
+    return [serialize(doc) for doc in docs]
 
 
 def create_incident(
     recordings: list[str],
     location: list[dict],
     incident_type: list[dict],
+    severity: str = "Unknown",
+    confidence: float = 0.0,
     incident_id: int | None = None,
 ) -> dict[str, Any]:
     assigned_id = incident_id if incident_id is not None else next_incident_id()
+    now = datetime.utcnow()
+    
     document = {
         "id": assigned_id,
         "recordings": recordings,
         "location": location,
         "type": incident_type,
+        "severity": severity,
+        "confidence": confidence,
+        "last_updated": now,
     }
     _collection().insert_one(document)
     return serialize(document)
@@ -64,15 +107,31 @@ def get_incident(incident_id: int) -> dict[str, Any] | None:
     return serialize(doc) if doc else None
 
 
-def append_recording(incident_id: int, recording: str) -> dict[str, Any] | None:
+# def append_recording(incident_id: int, recording: str) -> dict[str, Any] | None:
+#     result = _collection().find_one_and_update(
+#         {"id": incident_id},
+#         {"$push": {"recordings": {"$each": [recording], "$position": 0}}},
+#         return_document=ReturnDocument.AFTER,
+#         projection={"_id": 0},
+#     )
+#     return serialize(result) if result else None
+
+def append_recording(incident_id: int, recording: dict, severity: str | None = None) -> dict[str, Any] | None:
+    """Appends a new recording clip to an existing incident and updates the timestamp."""
+    update_ops: dict[str, Any] = {
+        "$push": {"recordings": recording},
+        "$set": {"last_updated": datetime.utcnow()}
+    }
+    if severity:
+        update_ops["$set"]["severity"] = severity
+
     result = _collection().find_one_and_update(
         {"id": incident_id},
-        {"$push": {"recordings": {"$each": [recording], "$position": 0}}},
+        update_ops,
         return_document=ReturnDocument.AFTER,
         projection={"_id": 0},
     )
     return serialize(result) if result else None
-
 
 def delete_incidents_with_latest_recording_before(cutoff_timestamp: float) -> int:
     """Delete incidents whose newest referenced clip is older than the cutoff."""
