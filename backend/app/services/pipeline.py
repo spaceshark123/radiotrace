@@ -192,13 +192,21 @@ def process_clip(
     }
 
 
-def submit_clip_async(app, audio: bytes, start_time: float, end_time: float, filename: str) -> None:
+def submit_clip_async(app, audio: bytes,
+    start_time: float,
+    end_time: float,
+    filename: str = "clip.mp3",
+    run_llm: bool = True,
+    clip_id: str | None = None,
+    source_key: str | None = None,
+    clip_metadata: dict[str, Any] | None = None,
+) -> None:
     """Queue clip analysis on a background thread so the request path stays fast."""
 
     def _job() -> None:
         with app.app_context():
             try:
-                process_clip(audio, start_time, end_time, filename=filename)
+                process_clip(audio, start_time, end_time, filename=filename, run_llm=run_llm, clip_id=clip_id, source_key=source_key, clip_metadata=clip_metadata)
             except Exception:
                 logger.exception("Background clip processing failed")
 
