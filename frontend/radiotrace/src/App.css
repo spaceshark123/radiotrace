@@ -221,6 +221,13 @@ button:disabled {
   background: #3a4454;
 }
 
+.badge-category {
+  display: inline-block;
+  background: #23445d;
+  color: #c6e8ff;
+  margin: 0.15rem 0;
+}
+
 .meter {
   width: 7rem;
   height: 0.4rem;
@@ -337,6 +344,27 @@ audio {
 .info-window {
   color: #1b2430;
   min-width: 12rem;
+}
+
+.info-incident + .info-incident {
+  border-top: 1px solid #c8d0d8;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+}
+
+.info-incident-hit {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  padding: 0.15rem;
+  text-align: left;
+}
+
+.info-incident-hit:hover {
+  background: #e8edf2;
 }
 
 @media (max-width: 960px) {

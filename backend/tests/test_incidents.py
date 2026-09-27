@@ -18,6 +18,7 @@ def test_health_ok(client):
 def test_create_and_list_incidents(client):
     payload = {
         "recordings": ["abc"],
+        "category": "property_crime",
         "location": [
             {
                 "google_maps": "Centennial Olympic Park, Atlanta, GA",
@@ -42,6 +43,7 @@ def test_create_and_list_incidents(client):
     assert listed.status_code == 200
     incidents = listed.get_json()["incidents"]
     assert any(item["id"] == incident_id for item in incidents)
+    assert next(item for item in incidents if item["id"] == incident_id)["category"] == "property_crime"
 
 
 def test_pipeline_endpoint_blank_skips_llm(client):
@@ -55,7 +57,7 @@ def test_pipeline_endpoint_blank_skips_llm(client):
         content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert response.get_json()["status"] == "skipped_blank_audio"
+    assert response.get_json()["status"] == "discarded_blank_audio"
 
 
 def test_delete_old_incidents_removes_only_stale_latest_recording(app):

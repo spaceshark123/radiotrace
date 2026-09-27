@@ -7,6 +7,9 @@ from typing import Any
 from app.services import broadcastify_service, clip_service, pipeline
 
 
+_rejected_source_keys: set[str] = set()
+
+
 def source_key(clip: dict[str, Any]) -> str:
     return ":".join(
         (
@@ -38,6 +41,8 @@ def ingest_new_clips(limit: int = 5) -> int:
         if encoding not in {"mp3", "m4a"}:
             continue
         key = source_key(clip)
+        if key in _rejected_source_keys:
+            continue
         if any(item.get("source_key") == key for item in clip_service.list_clips(1000)):
             continue
 
@@ -48,25 +53,21 @@ def ingest_new_clips(limit: int = 5) -> int:
             str(clip["filename"]),
             encoding,
         )
-        document = clip_service.create_clip(
+        result = pipeline.process_clip(
             audio,
+            clip.get("meta_starttime", 0),
+            clip.get("meta_endtime", 0),
             filename=f"{clip['filename']}.{encoding}",
             source_key=key,
-            metadata={
+            clip_metadata={
                 "hash": clip["hash"],
                 "systemId": clip["systemId"],
                 "encoding": encoding,
-                "start_time": clip.get("meta_starttime"),
-                "end_time": clip.get("meta_endtime")
             },
-        )
-        stored_count += 1
-        pipeline.process_clip(
-            audio,
-            0,
-            0,
-            filename=document["filename"],
-            clip_id=document["id"],
             run_llm=True,
         )
+        if result.get("status", "").startswith("discarded"):
+            _rejected_source_keys.add(key)
+        else:
+            stored_count += 1
     return stored_count

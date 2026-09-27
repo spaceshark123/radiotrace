@@ -23,6 +23,16 @@ export default function IncidentMap({ incidents, selectedId, onSelect, center }:
     () => incidents.find((item) => item.id === (infoId ?? selectedId)),
     [incidents, infoId, selectedId],
   )
+  const selectedLocation = selected ? firstLocation(selected) : undefined
+  const sameLocationIncidents = selectedLocation
+    ? incidents.filter((incident) => {
+        const location = firstLocation(incident)
+        return (
+          location?.latitude === selectedLocation.latitude &&
+          location.longitude === selectedLocation.longitude
+        )
+      })
+    : []
 
   if (!apiKey) {
     return (
@@ -76,18 +86,42 @@ export default function IncidentMap({ incidents, selectedId, onSelect, center }:
             </AdvancedMarker>
           )
         })}
-        {selected && firstLocation(selected) ? (
+        {selected && selectedLocation ? (
           <InfoWindow
             position={{
-              lat: firstLocation(selected)!.latitude,
-              lng: firstLocation(selected)!.longitude,
+              lat: selectedLocation.latitude,
+              lng: selectedLocation.longitude,
             }}
             onCloseClick={() => setInfoId(null)}
           >
             <div className="info-window">
-              <strong>Incident #{selected.id}</strong>
-              <p>{selected.type[0]?.description}</p>
-              <ConfidenceMeter incidentType={selected.type[0]} />
+              {sameLocationIncidents.map((incident) => {
+                const kind = incident.type[0]
+                const category = incident.category ?? kind?.category ?? 'unknown'
+                return (
+                  <button
+                    className="info-incident info-incident-hit"
+                    key={incident.id}
+                    type="button"
+                    onClick={() => {
+                      setInfoId(incident.id)
+                      onSelect(incident)
+                    }}
+                  >
+                    <strong>Incident #{incident.id}</strong>
+                    {category && (
+                      <>
+                        <div style={{ height: '0.25rem' }}></div>
+                        <span className="badge badge-category">
+                          {category.replaceAll('_', ' ')}
+                        </span>
+                      </>
+                    )}
+                    <p>{kind?.description}</p>
+                    <ConfidenceMeter incidentType={kind} />
+                  </button>
+                )
+              })}
             </div>
           </InfoWindow>
         ) : null}

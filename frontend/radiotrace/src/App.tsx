@@ -45,6 +45,14 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [refresh])
 
+  useEffect(() => {
+    if (selectedId === null) return
+    document.getElementById(`incident-${selectedId}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    })
+  }, [selectedId])
+
   async function loadDemo() {
     try {
       const items = await seedDemoIncidents()

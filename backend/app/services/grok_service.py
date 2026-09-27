@@ -13,7 +13,10 @@ from app.config import Config
 logger = logging.getLogger(__name__)
 
 GROK_SYSTEM_PROMPT = """You are RadioTrace, a public-safety analyst for Atlanta, Georgia police radio.
-Given a radio transcript, extract the incident fields described by the response schema.
+Classify whether the transcript describes a relevant public-safety incident and extract the fields in the response schema.
+Use relevance_category exactly as one of the allowed categories. Routine dispatch, administrative traffic,
+noise, gibberish, and unknown content are not relevant. If the transcript does not identify a usable
+street, intersection, neighborhood, or other location, set location to an empty string and location_confidence to 0.
 Do not include markdown or a preamble."""
 
 GROK_RESPONSE_FORMAT = {
@@ -24,6 +27,24 @@ GROK_RESPONSE_FORMAT = {
         "schema": {
             "type": "object",
             "properties": {
+                "is_relevant": {"type": "boolean"},
+                "relevance_category": {
+                    "type": "string",
+                    "enum": [
+                        "violent_crime",
+                        "traffic_collision",
+                        "fire",
+                        "medical_emergency",
+                        "missing_person",
+                        "public_safety_threat",
+                        "property_crime",
+                        "other_crime",
+                        "administrative",
+                        "routine_radio",
+                        "noise_or_gibberish",
+                        "unknown",
+                    ],
+                },
                 "severity": {
                     "type": "string",
                     "enum": ["Severe", "Moderate", "Minor"],
@@ -31,8 +52,17 @@ GROK_RESPONSE_FORMAT = {
                 "description": {"type": "string"},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 "location": {"type": "string"},
+                "location_confidence": {"type": "number", "minimum": 0, "maximum": 1},
             },
-            "required": ["severity", "description", "confidence", "location"],
+            "required": [
+                "is_relevant",
+                "relevance_category",
+                "severity",
+                "description",
+                "confidence",
+                "location",
+                "location_confidence",
+            ],
             "additionalProperties": False,
         },
     },
@@ -40,10 +70,24 @@ GROK_RESPONSE_FORMAT = {
 
 GROK_MATCH_PROMPT = """You are an Atlanta public-safety dispatcher. 
 Given a new radio transcript and a list of active recent incidents, determine if the new transcript belongs to ANY of the existing incidents.
-Return ONLY compact JSON with keys:
-matched_id (integer ID of the matching incident, or null if it is a brand new incident).
-reason (one short sentence explaining why).
-Do not include markdown."""
+Return the fields described by the response schema. Do not include markdown."""
+
+GROK_MATCH_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "incident_match",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "matched_id": {"type": ["integer", "null"]},
+                "reason": {"type": "string"},
+            },
+            "required": ["matched_id", "reason"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 class GrokError(RuntimeError):
@@ -124,11 +168,21 @@ def analyze_transcript(transcript: str) -> dict:
     except (TypeError, ValueError):
         confidence = 0.0
 
+    try:
+        location_confidence = max(
+            0.0, min(1.0, float(parsed.get("location_confidence", 0) or 0))
+        )
+    except (TypeError, ValueError):
+        location_confidence = 0.0
+
     return {
+        "is_relevant": bool(parsed.get("is_relevant", False)),
+        "relevance_category": str(parsed.get("relevance_category", "unknown")),
         "severity": severity,
         "description": str(parsed.get("description", "")).strip() or "Unspecified incident",
         "confidence": confidence,
         "location": str(parsed.get("location", "")).strip(),
+        "location_confidence": location_confidence,
     }
 
 def match_incident(transcript: str, active_incidents: list[dict]) -> int | None:
@@ -158,6 +212,7 @@ def match_incident(transcript: str, active_incidents: list[dict]) -> int | None:
         "model": Config.GROK_MODEL,
         "temperature": 0,
         "max_tokens": 100,
+        "response_format": GROK_MATCH_RESPONSE_FORMAT,
         "messages": [
             {"role": "system", "content": GROK_MATCH_PROMPT},
             {"role": "user", "content": user_payload},

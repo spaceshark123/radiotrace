@@ -29,66 +29,73 @@ def process_clip(
     filename: str = "clip.mp3",
     run_llm: bool = True,
     clip_id: str | None = None,
+    source_key: str | None = None,
+    clip_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Persist audio immediately, then optionally run STT + LLM + geocode.
-    Applies spatial coordinate matching followed by Grok semantic matching.
+    Analyze and filter audio before persisting it, then run geocoding and
+    spatial coordinate matching followed by Grok semantic matching.
     """
-    if clip_id is None:
-        clip = clip_service.create_clip(
-            audio,
-            filename=filename,
-            source_key=f"manual:{uuid4()}",
-            metadata={"start_time": start_time, "end_time": end_time},
-        )
-        clip_id = clip["id"]
-    recording = clip_id
-
     if audio_analysis.is_blank_audio(
         audio,
         min_bytes=Config.BLANK_AUDIO_MIN_BYTES,
         min_unique_bytes=Config.BLANK_AUDIO_MIN_UNIQUE_BYTES,
     ):
-        incident = incident_service.create_incident(
-            recordings=[recording],
-            location=[],
-            incident_type=[],
-        )
         return {
-            "status": "skipped_blank_audio",
-            "incident": incident,
+            "status": "discarded_blank_audio",
+            "incident": None,
             "transcript": "",
         }
 
     if not run_llm:
+        clip = clip_service.create_clip(
+            audio,
+            filename=filename,
+            source_key=source_key or f"manual:{uuid4()}",
+            metadata={
+                "start_time": start_time,
+                "end_time": end_time,
+                **(clip_metadata or {}),
+            },
+        )
         incident = incident_service.create_incident(
-            recordings=[recording],
-            location=[],
-            incident_type=[],
+            recordings=[clip["id"]], location=[], incident_type=[]
         )
         return {"status": "stored", "incident": incident, "transcript": ""}
 
     transcript = elevenlabs_service.transcribe_mp3(audio, filename=filename)
     if not transcript:
-        incident = incident_service.create_incident(
-            recordings=[recording],
-            location=[],
-            incident_type=[],
-        )
         return {
-            "status": "skipped_empty_transcript",
-            "incident": incident,
+            "status": "discarded_empty_transcript",
+            "incident": None,
             "transcript": "",
         }
 
-    if clip_id:
-        clip_service.update_metadata(clip_id, {"transcript": transcript})
-
     analysis = grok_service.analyze_transcript(transcript)
+    allowed_categories = {
+        "violent_crime",
+        "traffic_collision",
+        "fire",
+        "medical_emergency",
+        "missing_person",
+        "public_safety_threat",
+        "property_crime",
+        "other_crime",
+    }
+    if (
+        not analysis["is_relevant"]
+        or analysis["relevance_category"] not in allowed_categories
+        or analysis["confidence"] < Config.MIN_RELEVANCE_CONFIDENCE
+    ):
+        return {
+            "status": "discarded_irrelevant",
+            "incident": None,
+            "transcript": transcript,
+        }
+
     locations: list[dict] = []
     place = analysis.get("location") or ""
-    
-    if place:
+    if place and analysis["location_confidence"] >= Config.MIN_LOCATION_CONFIDENCE:
         try:
             geo = geocode_service.geocode_location(place)
             locations.append(
@@ -100,29 +107,19 @@ def process_clip(
                 }
             )
         except geocode_service.GeocodeError as exc:
-            logger.warning("Geocode failed, storing Atlanta fallback: %s", exc)
-            locations.append(
-                {
-                    "google_maps": place or f"{Config.CITY}, {Config.CITY_STATE}",
-                    "latitude": Config.CITY_CENTER_LAT,
-                    "longitude": Config.CITY_CENTER_LNG,
-                    "confidence": max(0.0, analysis["confidence"] * 0.4),
-                }
-            )
+            logger.warning("Geocode failed, rejecting clip: %s", exc)
 
     incident_type = [
         {
             "severity": analysis["severity"],
             "description": analysis["description"],
             "confidence": analysis["confidence"],
+            "category": analysis["relevance_category"],
         }
     ]
 
     # --- TWO-TIER SPATIAL MATCHING PIPELINE ---
-    incident = None
-    status = "processed"
-
-    candidate_incidents = []
+    candidate_incidents: list[dict] = []
     # Ensure we successfully geocoded valid coordinates to filter by
     if locations and "latitude" in locations[0] and "longitude" in locations[0]:
         target_lat = locations[0]["latitude"]
@@ -134,26 +131,56 @@ def process_clip(
             lon=target_lon,
             max_distance_deg=0.003  # Radius threshold (~300 meters)
         )
+    else:
+        # A follow-up transmission may omit the location; let semantic matching
+        # reuse the location already attached to a recent incident.
+        candidate_incidents = incident_service.list_recent_incidents()
 
     # Step 2: Fine-Grained Match (Use Grok to decide if transcript belongs to any spatially close candidate)
     matched_id = None
     if candidate_incidents and transcript:
         matched_id = grok_service.match_incident(transcript, candidate_incidents)
 
+    if matched_id is None and not locations:
+        return {
+            "status": "discarded_no_location",
+            "incident": None,
+            "transcript": transcript,
+        }
+
+    if clip_id is None:
+        clip = clip_service.create_clip(
+            audio,
+            filename=filename,
+            source_key=source_key or f"manual:{uuid4()}",
+            metadata={
+                "start_time": start_time,
+                "end_time": end_time,
+                "transcript": transcript,
+                **(clip_metadata or {}),
+            },
+        )
+        recording = clip["id"]
+    else:
+        recording = clip_id
+        clip_service.update_metadata(clip_id, {"transcript": transcript})
+
     # Step 3: Branch based on Grok's matching result
     if matched_id is not None:
         incident = incident_service.append_recording(
             incident_id=matched_id,
             recording=recording,
-            severity=analysis["severity"]
+            severity=analysis["severity"],
+            category=analysis["relevance_category"],
         )
-        status = "matched_and_updated"
+        status = "matched_and_updated" if incident else "processed"
     else:
         incident = incident_service.create_incident(
             recordings=[recording],
             location=locations,
             incident_type=incident_type,
             severity=analysis["severity"],
+            category=analysis["relevance_category"],
             confidence=analysis["confidence"],
         )
         status = "processed"

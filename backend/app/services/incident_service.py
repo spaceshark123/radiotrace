@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from datetime import datetime, timedelta, timezone
-import time;
+import time
 from pymongo import ReturnDocument
 
 from app.services import clip_service
@@ -36,6 +35,7 @@ def serialize(doc: dict[str, Any]) -> dict[str, Any]:
         "location": doc.get("location", []),
         "type": doc.get("type", []),
         "severity": doc.get("severity", "Unknown"),
+        "category": doc.get("category", "unknown"),
         "confidence": doc.get("confidence", 0.0),
         "last_updated": doc.get("last_updated"),
     }
@@ -76,6 +76,7 @@ def create_incident(
     location: list[dict],
     incident_type: list[dict],
     severity: str = "Unknown",
+    category: str = "unknown",
     confidence: float = 0.0,
     incident_id: int | None = None,
 ) -> dict[str, Any]:
@@ -88,6 +89,7 @@ def create_incident(
         "location": location,
         "type": incident_type,
         "severity": severity,
+        "category": category,
         "confidence": confidence,
         "last_updated": now,
     }
@@ -97,6 +99,16 @@ def create_incident(
 
 def list_incidents() -> list[dict[str, Any]]:
     docs = _collection().find({}, {"_id": 0}).sort("id", -1)
+    return [serialize(doc) for doc in docs]
+
+
+def list_recent_incidents(limit: int = 20) -> list[dict[str, Any]]:
+    docs = (
+        _collection()
+        .find({}, {"_id": 0})
+        .sort("last_updated", -1)
+        .limit(limit)
+    )
     return [serialize(doc) for doc in docs]
 
 
@@ -114,14 +126,21 @@ def get_incident(incident_id: int) -> dict[str, Any] | None:
 #     )
 #     return serialize(result) if result else None
 
-def append_recording(incident_id: int, recording: dict, severity: str | None = None) -> dict[str, Any] | None:
+def append_recording(
+    incident_id: int,
+    recording: str,
+    severity: str | None = None,
+    category: str | None = None,
+) -> dict[str, Any] | None:
     """Appends a new recording clip to an existing incident and updates the timestamp."""
     update_ops: dict[str, Any] = {
-        "$push": {"recordings": recording},
+        "$push": {"recordings": {"$each": [recording], "$position": 0}},
         "$set": {"last_updated": int(time.time())}
     }
     if severity:
         update_ops["$set"]["severity"] = severity
+    if category:
+        update_ops["$set"]["category"] = category
 
     result = _collection().find_one_and_update(
         {"id": incident_id},

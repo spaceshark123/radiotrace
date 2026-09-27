@@ -6,25 +6,28 @@ from app.services import audio_analysis, grok_service, pipeline
 from tests.conftest import BLANK_MP3, VARIED_MP3
 
 
-def test_blank_audio_skips_llm(app):
+def test_blank_audio_is_discarded_before_llm(app):
     with app.app_context():
         with (
             patch("app.services.pipeline.elevenlabs_service.transcribe_mp3") as stt,
             patch("app.services.pipeline.grok_service.analyze_transcript") as grok,
         ):
             result = pipeline.process_clip(BLANK_MP3, start_time=0, end_time=5)
-            assert result["status"] == "skipped_blank_audio"
+            assert result["status"] == "discarded_blank_audio"
             stt.assert_not_called()
             grok.assert_not_called()
-            assert result["incident"]["recordings"][0]
+            assert result["incident"] is None
 
 
 def test_process_clip_parses_grok_and_geocodes(app):
     grok_payload = {
+        "is_relevant": True,
+        "relevance_category": "violent_crime",
         "severity": "Severe",
         "description": "Car crash with 2 casualties",
         "confidence": 0.83,
         "location": "Peachtree Street",
+        "location_confidence": 0.9,
     }
     geo_payload = {
         "google_maps": "Peachtree St NE, Atlanta, GA",
@@ -53,6 +56,7 @@ def test_process_clip_parses_grok_and_geocodes(app):
     incident = result["incident"]
     assert incident["type"][0]["severity"] == "Severe"
     assert incident["type"][0]["description"] == "Car crash with 2 casualties"
+    assert incident["category"] == "violent_crime"
     assert incident["type"][0]["confidence"] == 0.83
     assert incident["location"][0]["latitude"] == 33.759
     assert incident["location"][0]["longitude"] == -84.388
@@ -93,16 +97,54 @@ def test_m4a_pipeline_passes_m4a_filename_to_transcription(app):
         ) as stt, patch(
             "app.services.pipeline.grok_service.analyze_transcript",
             return_value={
+                "is_relevant": True,
+                "relevance_category": "property_crime",
                 "severity": "Minor",
                 "description": "Test call",
-                "confidence": 0.5,
-                "location": "",
+                "confidence": 0.8,
+                "location": "Peachtree Street",
+                "location_confidence": 0.8,
+            },
+        ), patch(
+            "app.services.pipeline.geocode_service.geocode_location",
+            return_value={
+                "google_maps": "Peachtree Street, Atlanta, GA",
+                "latitude": 33.75,
+                "longitude": -84.39,
             },
         ):
             result = pipeline.process_clip(VARIED_MP3, 0, 5, filename="clip.m4a")
 
     assert result["status"] == "processed"
     stt.assert_called_once_with(VARIED_MP3, filename="clip.m4a")
+
+
+def test_irrelevant_clip_is_discarded_before_storage(app):
+    with app.app_context():
+        with (
+            patch(
+                "app.services.pipeline.elevenlabs_service.transcribe_mp3",
+                return_value="routine unit acknowledgement",
+            ),
+            patch(
+                "app.services.pipeline.grok_service.analyze_transcript",
+                return_value={
+                    "is_relevant": False,
+                    "relevance_category": "routine_radio",
+                    "severity": "Minor",
+                    "description": "Routine traffic",
+                    "confidence": 0.9,
+                    "location": "",
+                    "location_confidence": 0.0,
+                },
+            ),
+            patch("app.services.pipeline.clip_service.create_clip") as create_clip,
+        ):
+            result = pipeline.process_clip(VARIED_MP3, 0, 5)
+
+    assert result["status"] == "discarded_irrelevant"
+    assert result["incident"] is None
+    create_clip.assert_not_called()
 
 
 def test_is_blank_audio_detects_uniform_payload():

@@ -36,5 +36,6 @@ def create_incident():
         recordings=payload.get("recordings") or [],
         location=payload.get("location") or [],
         incident_type=payload.get("type") or [],
+        category=payload.get("category") or "unknown",
     )
     return jsonify(incident), 201

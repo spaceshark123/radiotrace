@@ -16,7 +16,8 @@
             {
                 "severity": "Severe",
                 "description": "Car crash with 2 casualties",
-                "confidence": 0.83
+                "confidence": 0.83,
+                "category": "traffic_collision"
             }
         ]
     }

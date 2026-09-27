@@ -22,15 +22,15 @@ def test_ingest_new_clips_stores_audio_and_deduplicates(app):
                 "app.services.radio_ingestion.pipeline.process_clip",
                 return_value={"status": "processed"},
             ) as process_clip,
+            patch(
+                "app.services.radio_ingestion.clip_service.list_clips",
+                side_effect=[[], [{"source_key": "clip-hash:6204:1790455000-10020:m4a"}]],
+            ),
         ):
             get_clips.return_value = {"calls": [clip]}
 
             assert radio_ingestion.ingest_new_clips() == 1
             assert radio_ingestion.ingest_new_clips() == 0
 
-        stored = radio_ingestion.list_clips()
-        assert len(stored) == 1
-        assert stored[0]["encoding"] == "m4a"
-        assert stored[0]["audio_id"]
         get_clip.assert_called_once_with("clip-hash", "6204", "1790455000-10020", "m4a")
         process_clip.assert_called_once()
