@@ -128,12 +128,11 @@ def process_clip(
         target_lat = locations[0]["latitude"]
         target_lon = locations[0]["longitude"]
 
-        # Step 1: Broad Filter (Find recent candidates within a ~500m radius and 1 hour window)
+        # Step 1: Broad Filter (Find recent candidates within a ~300m radius)
         candidate_incidents = incident_service.find_matching_incidents(
             lat=target_lat,
             lon=target_lon,
-            max_distance_deg=0.005,  # Radius threshold (~500 meters)
-            max_age_minutes=60
+            max_distance_deg=0.003  # Radius threshold (~300 meters)
         )
 
     # Step 2: Fine-Grained Match (Use Grok to decide if transcript belongs to any spatially close candidate)

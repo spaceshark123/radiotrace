@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 from datetime import datetime, timedelta, timezone
+import time;
 from pymongo import ReturnDocument
 
 from app.services import clip_service
@@ -42,14 +43,12 @@ def serialize(doc: dict[str, Any]) -> dict[str, Any]:
 def find_matching_incidents(
     lat: float, 
     lon: float, 
-    max_distance_deg: float = 0.005, 
-    max_age_minutes: int = 60
+    max_distance_deg: float = 0.005
 ) -> list[dict[str, Any]]:
     """
     Broad Filter: Finds recent incidents whose stored latitude and longitude 
     fall within a geographic bounding box threshold and time window.
     """
-    threshold = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
     
     # Define a bounding box around the target coordinates
     lat_min = lat - max_distance_deg
@@ -64,8 +63,7 @@ def find_matching_incidents(
                     "latitude": {"$gte": lat_min, "$lte": lat_max},
                     "longitude": {"$gte": lon_min, "$lte": lon_max}
                 }
-            },
-            "last_updated": {"$gte": threshold}
+            }
         },
         {"_id": 0}
     ).sort("id", -1)
@@ -82,7 +80,7 @@ def create_incident(
     incident_id: int | None = None,
 ) -> dict[str, Any]:
     assigned_id = incident_id if incident_id is not None else next_incident_id()
-    now = datetime.utcnow()
+    now = int(time.time())
     
     document = {
         "id": assigned_id,
@@ -120,7 +118,7 @@ def append_recording(incident_id: int, recording: dict, severity: str | None = N
     """Appends a new recording clip to an existing incident and updates the timestamp."""
     update_ops: dict[str, Any] = {
         "$push": {"recordings": recording},
-        "$set": {"last_updated": datetime.utcnow()}
+        "$set": {"last_updated": int(time.time())}
     }
     if severity:
         update_ops["$set"]["severity"] = severity
