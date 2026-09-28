@@ -81,12 +81,19 @@ def process_clip(
         "public_safety_threat",
         "property_crime",
         "other_crime",
+        "unknown"
     }
     if (
-        not analysis["is_relevant"]
-        or analysis["relevance_category"] not in allowed_categories
+        #not analysis["is_relevant"] or 
+        analysis["relevance_category"] not in allowed_categories
         or analysis["confidence"] < Config.MIN_RELEVANCE_CONFIDENCE
     ):
+        logger.info(
+            "Discarding transcript %s due to irrelevance: category=%s, confidence=%s",
+            transcript,
+            analysis["relevance_category"],
+            analysis["confidence"],
+        )
         return {
             "status": "discarded_irrelevant",
             "incident": None,

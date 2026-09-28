@@ -111,6 +111,7 @@ class BroadcastifyGuestClient:
                 return primed
 
             pos = self.last_current_time if current_time is None else current_time
+            logger.info("Fetching Broadcastify clips at pos=%s", pos)
             json_response = self._post_live_calls(pos, do_init=False)
             self.last_current_time = int(
                 json_response.get(

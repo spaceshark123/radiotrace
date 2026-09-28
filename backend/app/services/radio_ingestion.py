@@ -53,6 +53,7 @@ def ingest_new_clips(limit: int = 5) -> int:
         if item.get("source_key")
     }
     candidates: list[tuple[dict[str, Any], str, str]] = []
+    reasons = []
     for clip in payload.get("calls", []):
         total_count += 1
         if not all((clip.get("hash"), clip.get("systemId"), clip.get("filename"))):
@@ -112,10 +113,15 @@ def ingest_new_clips(limit: int = 5) -> int:
                 if status.startswith("discarded"):
                     with _source_keys_lock:
                         _rejected_source_keys.add(key)
+                        reasons.append((key, status))
                 else:
                     stored_count += 1
     logger.info("Newly stored clips: %s", stored_count)
     logger.info("Rejected clips: %s", total_count - stored_count)
+    # show rejected reasons
+    if _rejected_source_keys:
+        for _, status in reasons:
+            logger.info("Rejected reason: %s", status)
     print(
         f"[radio-ingestion] stored={stored_count} rejected={total_count - stored_count}",
         flush=True,
