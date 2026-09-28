@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 
 GROK_SYSTEM_PROMPT = """You are RadioTrace, a public-safety analyst for Atlanta, Georgia police radio.
 Classify whether the transcript describes a relevant public-safety incident and extract the fields in the response schema.
-Use relevance_category exactly as one of the allowed categories. Routine dispatch, administrative traffic,
-noise, gibberish, and unknown content are not relevant. If the transcript does not identify a usable location, set location_confidence to 0.
+Use relevance_category exactly as one of the allowed categories. Noise, gibberish, and unknown content are not relevant. If the transcript does not identify a usable location, set location_confidence to 0.
 Do not include markdown or a preamble."""
 
 GROK_RESPONSE_FORMAT = {

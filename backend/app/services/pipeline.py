@@ -81,6 +81,7 @@ def process_clip(
         "public_safety_threat",
         "property_crime",
         "other_crime",
+        "unknown"
     }
     if (
         #not analysis["is_relevant"] or 

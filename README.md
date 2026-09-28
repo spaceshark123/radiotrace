@@ -41,7 +41,7 @@ flowchart TD
     C --> FS[MongoDB GridFS audio]
     D --> |incidents list| UI[React + Google Maps frontend]
     FS --> |lazy loaded audio | UI
-```
+``` 
 
 Clips are not written to the database or referenced by an incident until they pass the audio, transcript, relevance, confidence, location, and matching filters.
 
